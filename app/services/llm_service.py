@@ -205,10 +205,13 @@ class LLMService:
                     continue
                 
                 # Validate the output
+                # Note: strict_topic_check=False for roadmaps to allow semantic abstraction
+                # Small models abstract concepts correctly but not lexically
+                # Safety remains enforced via schema validation and forbidden domain checks
                 is_valid, error_msg = validate_roadmap_output(
                     roadmap_data,
                     allowed_topics=allowed_topics,
-                    strict_topic_check=True
+                    strict_topic_check=False
                 )
                 
                 if is_valid:

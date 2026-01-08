@@ -55,3 +55,7 @@ htmlcov/
 .DS_Store
 Thumbs.db
 .kiro/
+# Test artifacts
+.hypothesis/
+
+.Documentation/

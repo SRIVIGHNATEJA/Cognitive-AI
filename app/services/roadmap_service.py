@@ -73,6 +73,67 @@ class RoadmapService:
         
         return module_id
     
+    def map_prerequisites_to_module_ids(self, modules: List[Module]) -> List[Module]:
+        """
+        Map topic-name prerequisites to module IDs.
+        
+        This function handles the mismatch between LLM output (topic names) and
+        validation requirements (module IDs). The LLM is instructed to use topic
+        names in prerequisites, but module IDs are generated after LLM output.
+        
+        This is a design alignment fix to bridge the gap between prompt instructions
+        and validation logic.
+        
+        Args:
+            modules: List of modules with topic-name prerequisites
+            
+        Returns:
+            List of modules with mapped module_id prerequisites
+        """
+        # Build topic_name -> module_id mapping (case-insensitive)
+        topic_to_id = {}
+        for module in modules:
+            key = module.topic_name.lower().strip()
+            topic_to_id[key] = module.module_id
+        
+        logger.debug(f"Built topic-to-ID mapping for {len(topic_to_id)} modules")
+        
+        # Transform prerequisites from topic names to module IDs
+        for module in modules:
+            mapped_prereqs = []
+            
+            for prereq in module.prerequisites:
+                prereq_key = prereq.lower().strip()
+                
+                if prereq_key in topic_to_id:
+                    # Exact match found
+                    mapped_id = topic_to_id[prereq_key]
+                    
+                    # Don't add self-references
+                    if mapped_id != module.module_id:
+                        mapped_prereqs.append(mapped_id)
+                        logger.debug(
+                            f"Mapped prerequisite '{prereq}' -> '{mapped_id}' "
+                            f"for module '{module.topic_name}'"
+                        )
+                    else:
+                        logger.warning(
+                            f"Skipping self-reference prerequisite '{prereq}' "
+                            f"for module '{module.topic_name}'"
+                        )
+                else:
+                    # No match - log warning and skip
+                    logger.warning(
+                        f"Could not map prerequisite '{prereq}' for module "
+                        f"'{module.topic_name}'. Skipping."
+                    )
+            
+            # Update module with mapped prerequisites
+            module.prerequisites = mapped_prereqs
+        
+        logger.info(f"Prerequisite mapping complete for {len(modules)} modules")
+        return modules
+    
     def validate_module_prerequisites(self, modules: List[Module]) -> bool:
         """
         Validate that all module prerequisites reference valid module IDs.
@@ -169,7 +230,11 @@ class RoadmapService:
                 )
                 modules.append(module)
             
-            # Validate prerequisites
+            # Map topic-name prerequisites to module IDs
+            # This aligns LLM output (topic names) with validation requirements (module IDs)
+            modules = self.map_prerequisites_to_module_ids(modules)
+            
+            # Validate prerequisites (now with module IDs)
             self.validate_module_prerequisites(modules)
             
             logger.info(f"Successfully generated roadmap with {len(modules)} modules")
