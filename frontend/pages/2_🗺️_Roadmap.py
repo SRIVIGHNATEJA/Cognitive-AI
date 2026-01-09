@@ -125,20 +125,33 @@ if not has_roadmap:
 # Display Roadmap Section
 else:
     roadmap = st.session_state.roadmap
+    mode = roadmap.get('mode', 'unknown')
     
     # Roadmap header
-    col1, col2, col3 = st.columns([2, 1, 1])
-    
-    with col1:
-        st.subheader("Your Learning Path")
-    
-    with col2:
-        mode_display = roadmap.get('mode', 'unknown').title()
-        st.metric("Mode", mode_display)
-    
-    with col3:
-        total_hours = roadmap.get('total_estimated_hours', 0)
-        st.metric("Total Time", format_hours(total_hours))
+    # In untimed mode, hide time information
+    if mode == 'untimed':
+        col1, col2 = st.columns([3, 1])
+        
+        with col1:
+            st.subheader("Your Learning Path")
+        
+        with col2:
+            mode_display = mode.title()
+            st.metric("Mode", mode_display)
+    else:
+        # Timed mode: show all metrics including time
+        col1, col2, col3 = st.columns([2, 1, 1])
+        
+        with col1:
+            st.subheader("Your Learning Path")
+        
+        with col2:
+            mode_display = mode.title()
+            st.metric("Mode", mode_display)
+        
+        with col3:
+            total_hours = roadmap.get('total_estimated_hours', 0)
+            st.metric("Total Time", format_hours(total_hours))
     
     # Roadmap info
     total_modules = roadmap.get('total_modules', 0)
@@ -159,6 +172,12 @@ else:
     else:
         st.subheader(f"Modules ({len(modules)})")
         
+        # Build module_id -> topic_name mapping for prerequisite display
+        module_id_to_name = {
+            module.get('module_id'): module.get('topic_name', 'Unknown')
+            for module in modules
+        }
+        
         # Display modules as cards
         for module in modules:
             module_id = module.get('module_id', 'unknown')
@@ -169,9 +188,8 @@ else:
             
             # Create expandable card for each module
             with st.expander(f"**{order}. {topic_name}**", expanded=False):
-                col1, col2 = st.columns([3, 1])
-                
-                with col1:
+                # In untimed mode, don't show time metric
+                if mode == 'untimed':
                     st.write(f"**Module ID:** `{module_id}`")
                     
                     if prerequisites:
@@ -179,12 +197,31 @@ else:
                         st.write(f"**Prerequisites:** {prereq_count} module(s)")
                         with st.expander("View Prerequisites"):
                             for prereq_id in prerequisites:
-                                st.text(f"• {prereq_id}")
+                                # Map prerequisite ID to name, fallback to ID if not found
+                                prereq_name = module_id_to_name.get(prereq_id, prereq_id)
+                                st.text(f"• {prereq_name}")
                     else:
                         st.write("**Prerequisites:** None")
-                
-                with col2:
-                    st.metric("Time", format_hours(estimated_hours))
+                else:
+                    # Timed mode: show time metric
+                    col1, col2 = st.columns([3, 1])
+                    
+                    with col1:
+                        st.write(f"**Module ID:** `{module_id}`")
+                        
+                        if prerequisites:
+                            prereq_count = len(prerequisites)
+                            st.write(f"**Prerequisites:** {prereq_count} module(s)")
+                            with st.expander("View Prerequisites"):
+                                for prereq_id in prerequisites:
+                                    # Map prerequisite ID to name, fallback to ID if not found
+                                    prereq_name = module_id_to_name.get(prereq_id, prereq_id)
+                                    st.text(f"• {prereq_name}")
+                        else:
+                            st.write("**Prerequisites:** None")
+                    
+                    with col2:
+                        st.metric("Time", format_hours(estimated_hours))
                 
                 # Action buttons
                 col_a, col_b = st.columns(2)
