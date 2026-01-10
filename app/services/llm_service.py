@@ -489,6 +489,9 @@ Generate the cheat sheet now:"""
         """
         Generate a quiz with exactly 5 MCQs for a module using the LLM.
         
+        LEGACY METHOD - Maintained for backward compatibility with old quizzes.
+        New code should use generate_quiz_questions_llm() instead.
+        
         Optimized for small models (qwen2.5:1.5b) with reduced question count.
         
         Each question must have:
@@ -576,6 +579,194 @@ Generate the cheat sheet now:"""
             f"Last error: {last_error}"
         )
     
+    def generate_quiz_questions_llm(
+        self,
+        module_info: Dict[str, Any],
+        content: str,
+        max_retries: int = 2
+    ) -> List[Dict[str, Any]]:
+        """
+        Generate quiz questions WITHOUT correct answers or explanations.
+        
+        NEW METHOD for Phase 2 - Deferred evaluation architecture.
+        Generates only questions and options. Correct answers and explanations
+        are generated later during evaluation via generate_quiz_answers_llm().
+        
+        Args:
+            module_info: Dictionary with module details (topic_name, etc.)
+            content: The source educational content (module-scoped)
+            max_retries: Maximum number of retry attempts on validation failure
+            
+        Returns:
+            List of 5 quiz question dictionaries (without correct_answer/explanation)
+            
+        Raises:
+            LLMServiceError: If generation fails or validation fails after retries
+        """
+        logger.info(f"Generating quiz questions (no answers) for module: {module_info.get('topic_name', 'Unknown')}")
+        
+        # Check Ollama availability
+        if not self._check_ollama_availability():
+            raise LLMServiceError(
+                "Ollama service is not available. Please ensure Ollama is running "
+                f"at {self.base_url}"
+            )
+        
+        # Build the prompt for questions only
+        prompt = self._build_quiz_questions_prompt(module_info, content)
+        
+        # Attempt generation with retries
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                logger.info(f"Quiz questions generation attempt {attempt + 1}/{max_retries + 1}")
+                
+                # Call Ollama with JSON format
+                response = self._call_ollama(prompt, format_json=True)
+                
+                # Extract the generated text
+                generated_text = response.get("response", "")
+                
+                if not generated_text:
+                    raise LLMServiceError("Ollama returned empty response")
+                
+                # Parse JSON
+                try:
+                    quiz_data = json.loads(generated_text)
+                except json.JSONDecodeError as e:
+                    error_msg = f"Failed to parse quiz output as JSON: {str(e)}"
+                    logger.warning(error_msg)
+                    last_error = error_msg
+                    continue
+                
+                # Validate the quiz structure (questions only)
+                is_valid, error_msg = self._validate_quiz_questions_structure(quiz_data)
+                
+                if is_valid:
+                    logger.info(f"Quiz questions generation successful on attempt {attempt + 1}")
+                    return quiz_data.get("questions", [])
+                else:
+                    logger.warning(f"Quiz questions validation failed: {error_msg}")
+                    last_error = error_msg
+                    
+                    # If not the last attempt, continue to retry
+                    if attempt < max_retries:
+                        logger.info("Retrying quiz questions generation...")
+                        continue
+                
+            except LLMServiceError:
+                # Re-raise LLM service errors immediately (no retry)
+                raise
+            
+            except Exception as e:
+                error_msg = f"Unexpected error during quiz questions generation: {str(e)}"
+                logger.error(error_msg)
+                last_error = error_msg
+                
+                if attempt < max_retries:
+                    continue
+        
+        # All retries exhausted
+        raise LLMServiceError(
+            f"Failed to generate valid quiz questions after {max_retries + 1} attempts. "
+            f"Last error: {last_error}"
+        )
+    
+    def generate_quiz_answers_llm(
+        self,
+        module_info: Dict[str, Any],
+        questions: List[Dict[str, Any]],
+        content: str,
+        max_retries: int = 2
+    ) -> List[Dict[str, Any]]:
+        """
+        Generate correct answers and explanations for quiz questions.
+        
+        NEW METHOD for Phase 2 - Deferred evaluation architecture.
+        Takes questions with options and generates correct_answer and explanation
+        for each question.
+        
+        Args:
+            module_info: Dictionary with module details (topic_name, etc.)
+            questions: List of question dictionaries (with question_text and options)
+            content: The source educational content (module-scoped)
+            max_retries: Maximum number of retry attempts on validation failure
+            
+        Returns:
+            List of answer dictionaries with correct_answer and explanation
+            
+        Raises:
+            LLMServiceError: If generation fails or validation fails after retries
+        """
+        logger.info(f"Generating quiz answers for {len(questions)} questions")
+        
+        # Check Ollama availability
+        if not self._check_ollama_availability():
+            raise LLMServiceError(
+                "Ollama service is not available. Please ensure Ollama is running "
+                f"at {self.base_url}"
+            )
+        
+        # Build the prompt for answers
+        prompt = self._build_quiz_answers_prompt(module_info, questions, content)
+        
+        # Attempt generation with retries
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                logger.info(f"Quiz answers generation attempt {attempt + 1}/{max_retries + 1}")
+                
+                # Call Ollama with JSON format
+                response = self._call_ollama(prompt, format_json=True)
+                
+                # Extract the generated text
+                generated_text = response.get("response", "")
+                
+                if not generated_text:
+                    raise LLMServiceError("Ollama returned empty response")
+                
+                # Parse JSON
+                try:
+                    answers_data = json.loads(generated_text)
+                except json.JSONDecodeError as e:
+                    error_msg = f"Failed to parse answers output as JSON: {str(e)}"
+                    logger.warning(error_msg)
+                    last_error = error_msg
+                    continue
+                
+                # Validate the answers structure
+                is_valid, error_msg = self._validate_quiz_answers_structure(answers_data, questions)
+                
+                if is_valid:
+                    logger.info(f"Quiz answers generation successful on attempt {attempt + 1}")
+                    return answers_data.get("answers", [])
+                else:
+                    logger.warning(f"Quiz answers validation failed: {error_msg}")
+                    last_error = error_msg
+                    
+                    # If not the last attempt, continue to retry
+                    if attempt < max_retries:
+                        logger.info("Retrying quiz answers generation...")
+                        continue
+                
+            except LLMServiceError:
+                # Re-raise LLM service errors immediately (no retry)
+                raise
+            
+            except Exception as e:
+                error_msg = f"Unexpected error during quiz answers generation: {str(e)}"
+                logger.error(error_msg)
+                last_error = error_msg
+                
+                if attempt < max_retries:
+                    continue
+        
+        # All retries exhausted
+        raise LLMServiceError(
+            f"Failed to generate valid quiz answers after {max_retries + 1} attempts. "
+            f"Last error: {last_error}"
+        )
+    
     def _build_quiz_prompt(
         self,
         module_info: Dict[str, Any],
@@ -583,6 +774,9 @@ Generate the cheat sheet now:"""
     ) -> str:
         """
         Build the prompt for quiz generation with strict format requirements.
+        
+        LEGACY METHOD - Generates questions WITH correct answers and explanations.
+        Maintained for backward compatibility.
         
         Optimized for small models with reduced question count (5 instead of 10).
         
@@ -639,6 +833,138 @@ CRITICAL RULES:
 - Questions should test understanding, not just memorization
 
 Generate the quiz now:"""
+        
+        return prompt
+    
+    def _build_quiz_questions_prompt(
+        self,
+        module_info: Dict[str, Any],
+        content: str
+    ) -> str:
+        """
+        Build the prompt for quiz questions generation (WITHOUT answers).
+        
+        NEW METHOD for Phase 2 - Generates only questions and options.
+        
+        Args:
+            module_info: Module details
+            content: Source educational content (module-scoped)
+            
+        Returns:
+            Complete prompt string
+        """
+        topic_name = module_info.get('topic_name', 'Unknown Topic')
+        
+        # Truncate content if too long
+        truncated_content = content[:3000] if len(content) > 3000 else content
+        
+        prompt = f"""You are an expert educator creating multiple-choice quiz questions.
+
+Generate quiz questions for the following topic:
+
+TOPIC: {topic_name}
+
+SOURCE MATERIAL:
+{truncated_content}
+
+STRICT REQUIREMENTS:
+1. Generate EXACTLY 5 multiple-choice questions
+2. Each question MUST have EXACTLY 4 plausible options
+3. DO NOT include correct answers or explanations
+4. Questions should cover the key concepts from the material
+5. Options should be plausible but clearly distinguishable
+6. Number questions from 1 to 5
+
+OUTPUT FORMAT (JSON):
+{{
+  "questions": [
+    {{
+      "question_number": 1,
+      "question_text": "What is...?",
+      "options": ["Option A", "Option B", "Option C", "Option D"]
+    }},
+    ... (repeat for all 5 questions)
+  ]
+}}
+
+CRITICAL RULES:
+- Output ONLY valid JSON, no additional text
+- DO NOT include "correct_answer" or "explanation" fields
+- Make questions clear and unambiguous
+- Ensure all 5 questions are included
+- Questions should test understanding, not just memorization
+- All 4 options should be plausible
+
+Generate the quiz questions now:"""
+        
+        return prompt
+    
+    def _build_quiz_answers_prompt(
+        self,
+        module_info: Dict[str, Any],
+        questions: List[Dict[str, Any]],
+        content: str
+    ) -> str:
+        """
+        Build the prompt for generating correct answers and explanations.
+        
+        NEW METHOD for Phase 2 - Generates answers for existing questions.
+        
+        Args:
+            module_info: Module details
+            questions: List of question dictionaries
+            content: Source educational content (module-scoped)
+            
+        Returns:
+            Complete prompt string
+        """
+        topic_name = module_info.get('topic_name', 'Unknown Topic')
+        
+        # Truncate content if too long
+        truncated_content = content[:3000] if len(content) > 3000 else content
+        
+        # Format questions for the prompt
+        questions_text = ""
+        for q in questions:
+            questions_text += f"\nQuestion {q['question_number']}: {q['question_text']}\n"
+            for i, option in enumerate(q['options'], 1):
+                questions_text += f"  {chr(64+i)}. {option}\n"
+        
+        prompt = f"""You are an expert educator providing correct answers and explanations for quiz questions.
+
+TOPIC: {topic_name}
+
+SOURCE MATERIAL:
+{truncated_content}
+
+QUIZ QUESTIONS:
+{questions_text}
+
+TASK:
+For each question above, provide:
+1. The correct answer (must match one of the options EXACTLY)
+2. A brief explanation (maximum 200 characters)
+
+OUTPUT FORMAT (JSON):
+{{
+  "answers": [
+    {{
+      "question_number": 1,
+      "correct_answer": "Option B",
+      "explanation": "Brief explanation here (max 200 chars)"
+    }},
+    ... (repeat for all 5 questions)
+  ]
+}}
+
+CRITICAL RULES:
+- Output ONLY valid JSON, no additional text
+- Ensure correct_answer matches one of the options EXACTLY
+- Keep explanations under 200 characters
+- Provide answers for all 5 questions
+- Base answers on the source material
+
+Generate the answers now:"""
         
         return prompt
     
@@ -709,6 +1035,9 @@ Generate the quiz now:"""
         """
         Validate that the quiz data meets all structural requirements.
         
+        LEGACY METHOD - Validates questions WITH correct answers and explanations.
+        Maintained for backward compatibility.
+        
         Enforces exactly 5 questions (optimized for small models).
         Includes normalization of correct_answer to handle common LLM output formats.
         
@@ -774,6 +1103,132 @@ Generate the quiz now:"""
             
             if not explanation.strip():
                 return False, f"Question {i} explanation cannot be empty"
+        
+        return True, ""
+    
+    def _validate_quiz_questions_structure(self, quiz_data: Dict[str, Any]) -> tuple[bool, str]:
+        """
+        Validate quiz questions structure (WITHOUT correct answers/explanations).
+        
+        NEW METHOD for Phase 2 - Validates questions with only question_text and options.
+        
+        Args:
+            quiz_data: The quiz data to validate
+            
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        # Check if questions key exists
+        if "questions" not in quiz_data:
+            return False, "Missing 'questions' key in quiz data"
+        
+        questions = quiz_data["questions"]
+        
+        # Check if it's a list
+        if not isinstance(questions, list):
+            return False, "'questions' must be a list"
+        
+        # Check exactly 5 questions
+        if len(questions) != 5:
+            return False, f"Expected exactly 5 questions, got {len(questions)}"
+        
+        # Validate each question
+        for i, question in enumerate(questions, 1):
+            # Check required fields (no correct_answer or explanation)
+            required_fields = ["question_number", "question_text", "options"]
+            for field in required_fields:
+                if field not in question:
+                    return False, f"Question {i} missing required field: {field}"
+            
+            # Ensure correct_answer and explanation are NOT present
+            if "correct_answer" in question:
+                return False, f"Question {i} should not have 'correct_answer' field"
+            if "explanation" in question:
+                return False, f"Question {i} should not have 'explanation' field"
+            
+            # Check question number
+            if question["question_number"] != i:
+                return False, f"Question {i} has incorrect question_number: {question['question_number']}"
+            
+            # Check question text is not empty
+            if not question["question_text"] or len(question["question_text"]) < 10:
+                return False, f"Question {i} has invalid question_text (must be at least 10 characters)"
+            
+            # Check exactly 4 options
+            options = question["options"]
+            if not isinstance(options, list) or len(options) != 4:
+                return False, f"Question {i} must have exactly 4 options, got {len(options) if isinstance(options, list) else 'invalid'}"
+            
+            # Check all options are non-empty strings
+            for j, option in enumerate(options, 1):
+                if not isinstance(option, str) or not option.strip():
+                    return False, f"Question {i}, option {j} is invalid"
+        
+        return True, ""
+    
+    def _validate_quiz_answers_structure(
+        self,
+        answers_data: Dict[str, Any],
+        questions: List[Dict[str, Any]]
+    ) -> tuple[bool, str]:
+        """
+        Validate quiz answers structure.
+        
+        NEW METHOD for Phase 2 - Validates correct answers and explanations.
+        
+        Args:
+            answers_data: The answers data to validate
+            questions: The original questions (for option validation)
+            
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        # Check if answers key exists
+        if "answers" not in answers_data:
+            return False, "Missing 'answers' key in answers data"
+        
+        answers = answers_data["answers"]
+        
+        # Check if it's a list
+        if not isinstance(answers, list):
+            return False, "'answers' must be a list"
+        
+        # Check exactly 5 answers
+        if len(answers) != 5:
+            return False, f"Expected exactly 5 answers, got {len(answers)}"
+        
+        # Validate each answer
+        for i, answer in enumerate(answers, 1):
+            # Check required fields
+            required_fields = ["question_number", "correct_answer", "explanation"]
+            for field in required_fields:
+                if field not in answer:
+                    return False, f"Answer {i} missing required field: {field}"
+            
+            # Check question number
+            if answer["question_number"] != i:
+                return False, f"Answer {i} has incorrect question_number: {answer['question_number']}"
+            
+            # Get corresponding question
+            question = questions[i - 1]
+            options = question["options"]
+            
+            # Normalize and validate correct answer
+            correct_answer = answer["correct_answer"]
+            try:
+                normalized_answer = self._normalize_correct_answer(correct_answer, options)
+                # Update the answer with normalized answer
+                answer["correct_answer"] = normalized_answer
+            except ValueError as e:
+                return False, f"Answer {i} validation failed: {str(e)}"
+            
+            # Check explanation length
+            explanation = answer["explanation"]
+            if not isinstance(explanation, str) or len(explanation) > 200:
+                return False, f"Answer {i} explanation must be a string with max 200 characters, got {len(explanation) if isinstance(explanation, str) else 'invalid'}"
+            
+            if not explanation.strip():
+                return False, f"Answer {i} explanation cannot be empty"
         
         return True, ""
     
