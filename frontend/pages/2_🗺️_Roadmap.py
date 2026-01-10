@@ -235,7 +235,7 @@ else:
                         # Set current module and navigate to content page
                         st.session_state.current_module_id = module_id
                         st.session_state.current_module = module
-                        st.info("Go to the **Content** page to view notes and cheat sheets.")
+                        st.switch_page("pages/3_📚_Content.py")
                 
                 with col_b:
                     if st.button(
