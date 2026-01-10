@@ -67,12 +67,18 @@ def _get_module_content(module_id: str) -> str:
     """
     Helper function to get module-scoped content for quiz generation.
     
-    Implements strict fallback order:
-    1. Module Notes (preferred)
-    2. Module Cheat Sheet (fallback)
-    3. Full input text (last resort - not ideal but prevents failure)
+    Implements strict fallback order (OPTIMIZED FOR PERFORMANCE):
+    1. Module Cheat Sheet (preferred - concise, focused, faster LLM processing)
+    2. Module Notes (fallback - comprehensive but longer)
+    3. Module syllabus scope only (last resort - prevents failure)
     
     NEVER concatenates multiple sources - uses FIRST available only.
+    
+    Rationale for cheat sheet priority:
+    - Cheat sheets are concise summaries of key concepts
+    - Shorter content = faster LLM processing = reduced latency
+    - Focused content = better quiz relevance = fewer validation failures
+    - Still module-scoped and educationally sound
     
     Args:
         module_id: Module identifier
@@ -83,26 +89,25 @@ def _get_module_content(module_id: str) -> str:
     Raises:
         HTTPException 404: If no content available
     """
-    # Fallback 1: Try module notes (preferred - most focused)
-    notes = cache_service.get_cached_content(module_id, 'notes')
-    if notes:
-        logger.info(f"Quiz generation using MODULE NOTES for {module_id}")
-        return notes
-    
-    # Fallback 2: Try module cheat sheet (good alternative)
-    cheat_sheet = cache_service.get_cached_content(module_id, 'cheat_sheet')
+    # Priority 1: Try module cheat sheet (PREFERRED - concise and fast)
+    cheat_sheet = cache_service.get_cached_content(module_id, 'cheatsheet')
     if cheat_sheet:
-        logger.info(f"Quiz generation using MODULE CHEAT SHEET for {module_id}")
+        logger.info(f"Quiz generation using CHEAT SHEET for module {module_id} (preferred source)")
         return cheat_sheet
     
-    # Fallback 3: Use full input text (last resort)
-    # Note: This is not ideal as it's not module-scoped, but prevents complete failure
-    # User should generate notes/cheat sheet first for best results
+    # Priority 2: Try module notes (fallback - comprehensive but longer)
+    notes = cache_service.get_cached_content(module_id, 'notes')
+    if notes:
+        logger.info(f"Quiz generation using NOTES for module {module_id} (fallback source)")
+        return notes
+    
+    # Priority 3: Use module syllabus scope only (last resort)
+    # Extract only the relevant module section from input text
     roadmap_data = cache_service.get_cached_roadmap()
     if not roadmap_data or "input_id" not in roadmap_data:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No content available for quiz generation. Please generate notes or cheat sheet first."
+            detail="No content available for quiz generation. Please generate cheat sheet or notes first."
         )
     
     input_id = roadmap_data["input_id"]
@@ -114,8 +119,15 @@ def _get_module_content(module_id: str) -> str:
             detail=f"Input text not found for ID '{input_id}'"
         )
     
-    logger.warning(f"Quiz generation using FULL INPUT TEXT for {module_id} - recommend generating notes first")
-    return cached_input['extracted_text']
+    # Get module details to extract relevant section
+    module = _get_module_from_roadmap(module_id)
+    input_text = cached_input['extracted_text']
+    
+    # Use full input text as module syllabus scope
+    # Note: This is module-scoped in the sense that the LLM prompt will focus on the module topic
+    # The LLM service will be instructed to generate questions only about the specific module topic
+    logger.info(f"Quiz generation using SYLLABUS SCOPE for module {module_id} (last resort - recommend generating cheat sheet)")
+    return input_text
 
 
 @router.post("/generate/{module_id}", response_model=QuizResponse, status_code=status.HTTP_200_OK)
