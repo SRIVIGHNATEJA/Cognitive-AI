@@ -58,7 +58,7 @@ class QuizService:
         time_taken_seconds: int
     ) -> Dict[str, Any]:
         """
-        Submit quiz answers and get results.
+        Submit quiz answers WITHOUT evaluation (Phase 4 - Deferred Evaluation).
         
         Args:
             module_id: The module ID
@@ -69,15 +69,10 @@ class QuizService:
         Returns:
             Dictionary containing:
                 - success: bool
+                - message: str
+                - submission_id: str
                 - quiz_id: str
                 - module_id: str
-                - score: int (out of 5)
-                - accuracy: float (percentage)
-                - time_taken_seconds: int
-                - time_limit_exceeded: bool
-                - correct_answers: int
-                - incorrect_answers: int
-                - detailed_results: list[dict] (per-question results)
                 
         Raises:
             Exception: If API call fails
@@ -90,6 +85,53 @@ class QuizService:
         }
         
         response = self.client.post(endpoint, json_data=payload)
+        return response
+    
+    def evaluate_quiz(self, quiz_id: str) -> Dict[str, Any]:
+        """
+        Evaluate a submitted quiz on-demand (Phase 4 - Deferred Evaluation).
+        
+        Args:
+            quiz_id: The quiz ID to evaluate
+            
+        Returns:
+            Dictionary containing:
+                - success: bool
+                - cached: bool (whether evaluation was cached)
+                - evaluation_id: str
+                - quiz_id: str
+                - module_id: str
+                - score: int (out of 5)
+                - accuracy: float (percentage)
+                - correct_answers_count: int
+                - incorrect_answers_count: int
+                - question_results: list[dict] (per-question results)
+                - time_taken_seconds: int
+                - time_limit_exceeded: bool
+                - evaluated_at: str (ISO timestamp)
+                
+        Raises:
+            Exception: If API call fails
+        """
+        endpoint = f"/api/quiz/evaluate/{quiz_id}"
+        response = self.client.post(endpoint, json_data={})
+        return response
+    
+    def get_evaluation(self, quiz_id: str) -> Dict[str, Any]:
+        """
+        Retrieve cached quiz evaluation (Phase 4 - Deferred Evaluation).
+        
+        Args:
+            quiz_id: The quiz ID
+            
+        Returns:
+            Dictionary containing evaluation results (same as evaluate_quiz)
+            
+        Raises:
+            Exception: If API call fails or evaluation not found
+        """
+        endpoint = f"/api/quiz/evaluation/{quiz_id}"
+        response = self.client.get(endpoint)
         return response
 
 

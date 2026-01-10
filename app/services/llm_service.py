@@ -941,9 +941,17 @@ QUIZ QUESTIONS:
 {questions_text}
 
 TASK:
-For each question above, provide:
+For each question, provide:
 1. The correct answer (must match one of the options EXACTLY)
-2. A brief explanation (maximum 200 characters)
+2. A VERY brief explanation (MAXIMUM 120 characters - count every character!)
+
+EXPLANATION EXAMPLES (all under 120 chars):
+- "DevOps combines development and operations for faster, automated deployments." (79 chars) ✓
+- "Microservices split apps into small, independent services for better scalability." (83 chars) ✓
+- "CI/CD automates testing and deployment to speed up software delivery." (71 chars) ✓
+
+BAD EXAMPLES (too long):
+- "DevOps is a set of practices that combines software development and IT operations to shorten the development lifecycle and provide continuous delivery." (155 chars) ✗
 
 OUTPUT FORMAT (JSON):
 {{
@@ -951,7 +959,7 @@ OUTPUT FORMAT (JSON):
     {{
       "question_number": 1,
       "correct_answer": "Option B",
-      "explanation": "Brief explanation here (max 200 chars)"
+      "explanation": "Very brief explanation (max 120 chars)"
     }},
     ... (repeat for all 5 questions)
   ]
@@ -960,9 +968,12 @@ OUTPUT FORMAT (JSON):
 CRITICAL RULES:
 - Output ONLY valid JSON, no additional text
 - Ensure correct_answer matches one of the options EXACTLY
-- Keep explanations under 200 characters
+- Keep explanations under 120 characters - BE EXTREMELY CONCISE
+- Remove all unnecessary words - every character counts
+- Use short sentences - avoid complex phrases
 - Provide answers for all 5 questions
 - Base answers on the source material
+- IMPORTANT: Explanations over 120 characters will be REJECTED
 
 Generate the answers now:"""
         
@@ -1222,10 +1233,13 @@ Generate the answers now:"""
             except ValueError as e:
                 return False, f"Answer {i} validation failed: {str(e)}"
             
-            # Check explanation length
+            # Check explanation length (ask for 120, validate at 180 for buffer)
             explanation = answer["explanation"]
-            if not isinstance(explanation, str) or len(explanation) > 200:
-                return False, f"Answer {i} explanation must be a string with max 200 characters, got {len(explanation) if isinstance(explanation, str) else 'invalid'}"
+            if not isinstance(explanation, str):
+                return False, f"Answer {i} explanation must be a string, got {type(explanation).__name__}"
+            
+            if len(explanation) > 180:
+                return False, f"Answer {i} explanation too long: {len(explanation)} chars (max 180). Please be more concise."
             
             if not explanation.strip():
                 return False, f"Answer {i} explanation cannot be empty"

@@ -407,7 +407,7 @@ class QuestionResult(BaseModel):
     user_answer: str = Field(..., description="User's selected answer")
     correct_answer: str = Field(..., description="The correct answer")
     is_correct: bool = Field(..., description="Whether user's answer is correct")
-    explanation: str = Field(..., description="Explanation of the correct answer")
+    explanation: str = Field(..., max_length=180, description="Explanation of the correct answer (max 180 chars)")
     
     model_config = {
         "json_schema_extra": {

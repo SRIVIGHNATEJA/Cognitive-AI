@@ -102,6 +102,7 @@ if selected_module_id != st.session_state.get('current_module_id'):
     st.session_state.quiz_answers = {}
     st.session_state.quiz_start_time = None
     st.session_state.quiz_submitted = False
+    st.session_state.quiz_evaluated = False
 
 # Get current module details
 current_module = st.session_state.get('current_module', {})
@@ -149,85 +150,88 @@ if 'quiz_start_time' not in st.session_state:
 if 'quiz_submitted' not in st.session_state:
     st.session_state.quiz_submitted = False
 
+if 'quiz_evaluated' not in st.session_state:
+    st.session_state.quiz_evaluated = False
+
 # Check if quiz exists for this module
 cached_quiz = st.session_state.quiz_cache.get(selected_module_id)
 
 # Check if quiz is already submitted
 quiz_submitted = st.session_state.get('quiz_submitted', False)
 
-# If quiz is submitted, show results
-if quiz_submitted and cached_quiz and cached_quiz.get('results'):
+# Check if quiz is already evaluated
+quiz_evaluated = st.session_state.get('quiz_evaluated', False)
+
+# If quiz is evaluated, show results
+if quiz_evaluated and cached_quiz and cached_quiz.get('evaluation'):
     st.subheader("Quiz Results")
     
-    results = cached_quiz['results']
+    evaluation = cached_quiz['evaluation']
     
     # Display score
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("Score", f"{results.get('score', 0)}/5")
+        st.metric("Score", f"{evaluation.get('score', 0)}/5")
     
     with col2:
-        st.metric("Accuracy", f"{results.get('accuracy', 0):.1f}%")
+        st.metric("Accuracy", f"{evaluation.get('accuracy', 0):.1f}%")
     
     with col3:
-        time_taken = results.get('time_taken_seconds', 0)
+        time_taken = evaluation.get('time_taken_seconds', 0)
         minutes = time_taken // 60
         seconds = time_taken % 60
         st.metric("Time Taken", f"{minutes}m {seconds}s")
     
     with col4:
-        correct = results.get('correct_answers', 0)
-        incorrect = results.get('incorrect_answers', 0)
+        correct = evaluation.get('correct_answers_count', 0)
+        incorrect = evaluation.get('incorrect_answers_count', 0)
         st.metric("Correct/Incorrect", f"{correct}/{incorrect}")
     
     # Time limit exceeded warning
-    if results.get('time_limit_exceeded'):
+    if evaluation.get('time_limit_exceeded'):
         st.warning("⏰ Time limit exceeded! Your score may be affected.")
+    
+    # Show if evaluation was cached
+    if evaluation.get('cached'):
+        st.info("📋 Showing cached evaluation results")
     
     st.divider()
     
     # Display detailed results
     st.subheader("Detailed Results")
     
-    detailed_results = results.get('detailed_results', [])
+    question_results = evaluation.get('question_results', [])
     
-    for result in detailed_results:
+    for result in question_results:
         question_num = result.get('question_number', 0)
+        question_text = result.get('question_text', '')
+        options = result.get('options', [])
         is_correct = result.get('is_correct', False)
         user_answer = result.get('user_answer', '')
         correct_answer = result.get('correct_answer', '')
         explanation = result.get('explanation', '')
         
-        # Find the question from cached quiz
-        quiz_data = cached_quiz.get('quiz', {})
-        questions = quiz_data.get('questions', [])
-        question_data = next((q for q in questions if q.get('question_number') == question_num), None)
+        # Display question with result indicator
+        if is_correct:
+            st.success(f"**Question {question_num}:** {question_text} ✅")
+        else:
+            st.error(f"**Question {question_num}:** {question_text} ❌")
         
-        if question_data:
-            question_text = question_data.get('question_text', '')
-            options = question_data.get('options', [])
-            
-            # Display question with result indicator
-            if is_correct:
-                st.success(f"**Question {question_num}:** {question_text} ✅")
+        # Display options
+        for option in options:
+            if option == correct_answer:
+                st.markdown(f"- **{option}** ✓ (Correct answer)")
+            elif option == user_answer and not is_correct:
+                st.markdown(f"- **{option}** ✗ (Your answer)")
             else:
-                st.error(f"**Question {question_num}:** {question_text} ❌")
-            
-            # Display options
-            for option in options:
-                if option == correct_answer:
-                    st.markdown(f"- **{option}** ✓ (Correct answer)")
-                elif option == user_answer and not is_correct:
-                    st.markdown(f"- **{option}** ✗ (Your answer)")
-                else:
-                    st.markdown(f"- {option}")
-            
-            # Display explanation
-            if explanation:
-                st.caption(f"💡 {explanation}")
-            
-            st.divider()
+                st.markdown(f"- {option}")
+        
+        # Display explanation
+        if explanation:
+            st.caption(f"💡 {explanation}")
+        
+        st.divider()
     
     # Navigation buttons
     st.subheader("Actions")
@@ -252,7 +256,44 @@ if quiz_submitted and cached_quiz and cached_quiz.get('results'):
                 st.session_state.quiz_answers = {}
                 st.session_state.quiz_start_time = None
                 st.session_state.quiz_submitted = False
+                st.session_state.quiz_evaluated = False
                 st.rerun()
+
+# If quiz is submitted but not evaluated, show evaluate button
+elif quiz_submitted and cached_quiz and not quiz_evaluated:
+    st.subheader("Quiz Submitted")
+    
+    submission = cached_quiz.get('submission', {})
+    quiz_data = cached_quiz.get('quiz', {})
+    quiz_id = quiz_data.get('quiz_id', '')
+    
+    st.success("✅ Quiz submitted successfully!")
+    
+    st.info(f"""
+    Your answers have been saved. Click the button below to evaluate your quiz and see your results.
+    
+    **Submission ID:** {submission.get('submission_id', 'N/A')}
+    """)
+    
+    st.divider()
+    
+    # Evaluate button
+    if st.button("🎯 Evaluate Quiz", type="primary", use_container_width=True):
+        try:
+            with st.spinner("Evaluating your answers... This may take a moment."):
+                evaluation = quiz_service.evaluate_quiz(quiz_id=quiz_id)
+            
+            # Store evaluation in cache
+            st.session_state.quiz_cache[selected_module_id]['evaluation'] = evaluation
+            st.session_state.quiz_evaluated = True
+            
+            score = evaluation.get('score', 0)
+            accuracy = evaluation.get('accuracy', 0)
+            show_success(f"Quiz evaluated! Score: {score}/5 ({accuracy:.1f}%)")
+            st.rerun()
+            
+        except Exception as e:
+            handle_api_error(e, "Quiz evaluation")
 
 # If quiz exists but not submitted, display quiz
 elif cached_quiz and not quiz_submitted:
@@ -316,25 +357,25 @@ elif cached_quiz and not quiz_submitted:
     if not all_answered:
         st.warning(f"⚠️ Please answer all questions. ({len(st.session_state.quiz_answers)}/5 answered)")
     
-    if st.button("✅ Submit Quiz", type="primary", disabled=not all_answered, use_container_width=True):
+    if st.button("✅ Submit Answers", type="primary", disabled=not all_answered, use_container_width=True):
         # Calculate time taken
         time_taken = int((datetime.now() - st.session_state.quiz_start_time).total_seconds())
         
-        # Submit quiz
+        # Submit quiz (no evaluation yet)
         try:
-            with st.spinner("Submitting quiz..."):
-                results = quiz_service.submit_quiz(
+            with st.spinner("Submitting your answers..."):
+                submission = quiz_service.submit_quiz(
                     module_id=selected_module_id,
                     quiz_id=quiz_id,
                     answers=st.session_state.quiz_answers,
                     time_taken_seconds=time_taken
                 )
             
-            # Store results in cache
-            st.session_state.quiz_cache[selected_module_id]['results'] = results
+            # Store submission in cache
+            st.session_state.quiz_cache[selected_module_id]['submission'] = submission
             st.session_state.quiz_submitted = True
             
-            show_success(f"Quiz submitted! Score: {results.get('score', 0)}/5")
+            show_success("Answers submitted successfully! Click 'Evaluate Quiz' to see your results.")
             st.rerun()
             
         except Exception as e:
@@ -388,6 +429,7 @@ else:
                 st.session_state.quiz_answers = {}
                 st.session_state.quiz_start_time = None
                 st.session_state.quiz_submitted = False
+                st.session_state.quiz_evaluated = False
                 
                 show_success("Quiz generated successfully! 5 questions ready.")
                 st.rerun()
@@ -406,15 +448,16 @@ with st.expander("ℹ️ Help"):
     1. Select a module from the dropdown
     2. Click "Generate Quiz" if not yet created
     3. Wait for generation (up to 30 seconds)
-    4. Answer all 10 multiple-choice questions
-    5. Click "Submit Quiz" when ready
-    6. View your results and explanations
+    4. Answer all 5 multiple-choice questions
+    5. Click "Submit Answers" when ready
+    6. Click "Evaluate Quiz" to see your results
+    7. View your score and detailed explanations
     
     **Quiz Format:**
     - 5 multiple-choice questions per module (optimized for performance)
     - 4 options per question
     - Single attempt per module
-    - Immediate feedback after submission
+    - Deferred evaluation (submit first, evaluate when ready)
     
     **Quiz Modes:**
     
@@ -428,15 +471,23 @@ with st.expander("ℹ️ Help"):
     - Take as long as you need
     - Focus on understanding
     
+    ### Evaluation Process
+    
+    The quiz uses a two-step process:
+    1. **Submit Answers** - Your answers are saved
+    2. **Evaluate Quiz** - AI evaluates your answers and generates explanations
+    
+    This allows you to submit answers quickly and evaluate when ready.
+    
     ### Results
     
-    After submission, you'll see:
+    After evaluation, you'll see:
     - Overall score (out of 5)
     - Accuracy percentage
     - Time taken
     - Correct/incorrect count
     - Detailed per-question results
-    - Explanations for each answer
+    - AI-generated explanations for each answer
     
     ### Navigation
     
@@ -450,5 +501,6 @@ with st.expander("ℹ️ Help"):
     - Read questions carefully
     - All questions must be answered before submission
     - You cannot retake a quiz once submitted
+    - Evaluation may take a few seconds (AI processing)
     - Use explanations to learn from mistakes
     """)
