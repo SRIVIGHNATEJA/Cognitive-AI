@@ -228,38 +228,34 @@ async def generate_quiz(module_id: str, request: QuizGenerateRequest = Body(...)
         )
 
 
-@router.post("/submit/{module_id}", response_model=QuizResultResponse, status_code=status.HTTP_200_OK)
-async def submit_quiz(module_id: str, request: QuizSubmitRequest = Body(...)) -> QuizResultResponse:
+@router.post("/submit/{module_id}", status_code=status.HTTP_200_OK)
+async def submit_quiz(module_id: str, request: QuizSubmitRequest = Body(...)) -> Dict[str, Any]:
     """
-    Submit quiz answers and get evaluation results.
+    Submit quiz answers WITHOUT evaluation (Phase 3 - Deferred Evaluation).
     
     This endpoint:
-    1. Retrieves the quiz from history
-    2. Evaluates submitted answers
-    3. Calculates score, accuracy, and checks time limit
-    4. Stores quiz result and updates metrics
-    5. Triggers automatic Q&A pruning (keeps last 2)
-    6. Returns detailed results
+    1. Validates that the quiz exists
+    2. Stores the submission (answers + time taken)
+    3. Returns submission confirmation
     
-    Backend accepts all submissions regardless of time limit.
-    Time limit validation is recorded but does not affect score.
+    Evaluation happens later when user calls /evaluate/{quiz_id}.
     
     Args:
         module_id: Module identifier (from path)
         request: Quiz submission with quiz_id, answers, and time_taken
         
     Returns:
-        QuizResultResponse with score, accuracy, and detailed results
+        Dictionary with submission confirmation
         
     Raises:
         HTTPException 404: If quiz not found
         HTTPException 400: If validation fails
-        HTTPException 500: If evaluation fails
+        HTTPException 500: If submission storage fails
     """
     try:
         logger.info(f"Quiz submission received for quiz: {request.quiz_id}")
         
-        # Retrieve quiz from history
+        # Validate that quiz exists
         quiz_history = cache_service.get_quiz_history(module_id)
         if not quiz_history:
             raise HTTPException(
@@ -268,72 +264,30 @@ async def submit_quiz(module_id: str, request: QuizSubmitRequest = Body(...)) ->
             )
         
         # Find the specific quiz
-        quiz_data = None
-        for quiz in quiz_history:
-            if quiz.get("quiz_id") == request.quiz_id:
-                quiz_data = quiz
-                break
-        
-        if not quiz_data:
+        quiz_exists = any(q.get("quiz_id") == request.quiz_id for q in quiz_history)
+        if not quiz_exists:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Quiz '{request.quiz_id}' not found in history"
             )
         
-        # Reconstruct Quiz object from cached data
-        from app.models import Quiz, QuizQuestion
-        from datetime import datetime
-        
-        questions = [QuizQuestion(**q) for q in quiz_data["questions"]]
-        quiz = Quiz(
-            quiz_id=quiz_data["quiz_id"],
-            module_id=quiz_data["module_id"],
-            questions=questions,
-            mode=LearningMode(quiz_data["mode"]),
-            time_limit_seconds=quiz_data.get("time_limit_seconds"),
-            created_at=datetime.fromisoformat(quiz_data["created_at"])
-        )
-        
-        # Evaluate quiz
-        logger.info(f"Evaluating quiz {request.quiz_id}")
-        result = quiz_service.evaluate_quiz(
-            quiz=quiz,
-            answers=request.answers,
+        # Store submission (no evaluation yet)
+        submission_id = quiz_service.submit_quiz_submission(
+            quiz_id=request.quiz_id,
+            module_id=module_id,
+            user_answers=request.answers,
             time_taken_seconds=request.time_taken_seconds
         )
         
-        # Store quiz data (updates metrics and triggers pruning)
-        quiz_service.store_quiz_data(quiz, result)
+        logger.info(f"Quiz submission stored: {submission_id}")
         
-        # Build detailed results
-        detailed_results = []
-        for question in quiz.questions:
-            user_answer = request.answers.get(question.question_number, "")
-            is_correct = user_answer == question.correct_answer
-            
-            detailed_results.append({
-                "question_number": question.question_number,
-                "question_text": question.question_text,
-                "user_answer": user_answer,
-                "correct_answer": question.correct_answer,
-                "is_correct": is_correct,
-                "explanation": question.explanation
-            })
-        
-        logger.info(f"Quiz evaluation complete: score={result.score}/{len(quiz.questions)}")
-        
-        return QuizResultResponse(
-            success=True,
-            quiz_id=result.quiz_id,
-            module_id=result.module_id,
-            score=result.score,
-            accuracy=result.accuracy,
-            time_taken_seconds=result.time_taken_seconds,
-            time_limit_exceeded=result.time_limit_exceeded,
-            correct_answers=result.correct_answers,
-            incorrect_answers=result.incorrect_answers,
-            detailed_results=detailed_results
-        )
+        return {
+            "success": True,
+            "message": "Quiz submitted successfully",
+            "submission_id": submission_id,
+            "quiz_id": request.quiz_id,
+            "module_id": module_id
+        }
         
     except HTTPException:
         # Re-raise HTTP exceptions
@@ -351,6 +305,156 @@ async def submit_quiz(module_id: str, request: QuizSubmitRequest = Body(...)) ->
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred while submitting the quiz"
+        )
+
+
+@router.post("/evaluate/{quiz_id}", status_code=status.HTTP_200_OK)
+async def evaluate_quiz(quiz_id: str) -> Dict[str, Any]:
+    """
+    Evaluate a submitted quiz on-demand (Phase 3 - Deferred Evaluation).
+    
+    This endpoint:
+    1. Retrieves quiz questions and submission
+    2. Checks if legacy quiz (has correct_answer) → use embedded answers
+    3. If new quiz → generates answers with LLM
+    4. Computes score, accuracy, per-question results
+    5. Stores evaluation for future retrieval
+    6. Returns detailed evaluation results
+    
+    Args:
+        quiz_id: Quiz identifier (from path)
+        
+    Returns:
+        Dictionary with evaluation results
+        
+    Raises:
+        HTTPException 404: If quiz or submission not found
+        HTTPException 503: If LLM service fails
+        HTTPException 500: If evaluation fails
+    """
+    try:
+        logger.info(f"Quiz evaluation requested for quiz: {quiz_id}")
+        
+        # Check if evaluation already exists
+        existing_evaluation = quiz_service.get_quiz_evaluation(quiz_id)
+        if existing_evaluation:
+            logger.info(f"Returning cached evaluation for quiz {quiz_id}")
+            return {
+                "success": True,
+                "cached": True,
+                **existing_evaluation
+            }
+        
+        # Get module_id from quiz history (search all modules)
+        module_id = None
+        quiz_data = None
+        roadmap_data = cache_service.get_cached_roadmap()
+        
+        if roadmap_data:
+            for module in roadmap_data.get("modules", []):
+                mod_id = module.get("module_id")
+                quiz_history = cache_service.get_quiz_history(mod_id)
+                if quiz_history:
+                    for quiz in quiz_history:
+                        if quiz.get("quiz_id") == quiz_id:
+                            module_id = mod_id
+                            quiz_data = quiz
+                            break
+                if module_id:
+                    break
+        
+        if not module_id or not quiz_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Quiz '{quiz_id}' not found"
+            )
+        
+        # Get module content for LLM evaluation
+        content = _get_module_content(module_id)
+        
+        # Evaluate quiz
+        evaluation = quiz_service.evaluate_quiz_submission(
+            quiz_id=quiz_id,
+            module_id=module_id,
+            content=content
+        )
+        
+        logger.info(f"Quiz evaluation complete for quiz {quiz_id}")
+        
+        return {
+            "success": True,
+            "cached": False,
+            **evaluation
+        }
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
+    except ValueError as e:
+        # Validation errors
+        logger.error(f"Quiz evaluation validation error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Quiz evaluation failed: {str(e)}"
+        )
+    except RuntimeError as e:
+        # LLM service errors
+        logger.error(f"LLM service error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"LLM service unavailable: {str(e)}. Please ensure Ollama is running."
+        )
+    except Exception as e:
+        # Unexpected errors
+        logger.error(f"Unexpected error evaluating quiz: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred while evaluating the quiz"
+        )
+
+
+@router.get("/evaluation/{quiz_id}", status_code=status.HTTP_200_OK)
+async def get_quiz_evaluation(quiz_id: str) -> Dict[str, Any]:
+    """
+    Retrieve cached quiz evaluation (Phase 3 - Deferred Evaluation).
+    
+    This endpoint retrieves a previously computed evaluation.
+    If no evaluation exists, returns 404.
+    
+    Args:
+        quiz_id: Quiz identifier (from path)
+        
+    Returns:
+        Dictionary with evaluation results
+        
+    Raises:
+        HTTPException 404: If evaluation not found
+    """
+    try:
+        logger.info(f"Retrieving evaluation for quiz: {quiz_id}")
+        
+        evaluation = quiz_service.get_quiz_evaluation(quiz_id)
+        
+        if not evaluation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No evaluation found for quiz '{quiz_id}'. Please evaluate the quiz first."
+            )
+        
+        logger.info(f"Retrieved evaluation for quiz {quiz_id}")
+        
+        return {
+            "success": True,
+            **evaluation
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving evaluation: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while retrieving the evaluation"
         )
 
 

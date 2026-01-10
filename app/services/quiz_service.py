@@ -93,11 +93,14 @@ class QuizService:
         """
         Generate a quiz for a module using LLM.
         
+        PHASE 3 UPDATE: Now generates questions WITHOUT correct answers/explanations.
+        Uses generate_quiz_questions_llm() for deferred evaluation architecture.
+        
         This method:
-        1. Calls LLM service to generate 5 MCQ questions
+        1. Calls LLM service to generate 5 MCQ questions (questions + options only)
         2. Validates quiz structure (5 questions, 4 options each)
         3. Assigns deterministic quiz ID
-        4. Returns Quiz object
+        4. Returns Quiz object WITHOUT correct_answer/explanation
         
         Args:
             module: Module to generate quiz for
@@ -106,7 +109,7 @@ class QuizService:
             time_limit_seconds: Time limit in seconds (required for timed mode)
             
         Returns:
-            Quiz object with 5 questions
+            Quiz object with 5 questions (without correct_answer/explanation)
             
         Raises:
             ValueError: If quiz generation fails or validation fails
@@ -126,8 +129,8 @@ class QuizService:
                 "estimated_hours": module.estimated_hours
             }
             
-            # Call LLM service to generate quiz questions
-            questions_data = self.llm_service.generate_quiz_llm(
+            # Call LLM service to generate quiz questions (WITHOUT answers)
+            questions_data = self.llm_service.generate_quiz_questions_llm(
                 module_info=module_info,
                 content=content
             )
@@ -135,17 +138,16 @@ class QuizService:
             if not questions_data or len(questions_data) != 5:
                 raise ValueError(f"LLM generated invalid number of questions: {len(questions_data) if questions_data else 0}")
             
-            logger.info(f"LLM generated {len(questions_data)} questions")
+            logger.info(f"LLM generated {len(questions_data)} questions (without answers)")
             
-            # Convert to QuizQuestion objects
+            # Convert to QuizQuestion objects (without correct_answer/explanation)
             questions = []
             for q_data in questions_data:
                 question = QuizQuestion(
                     question_number=q_data["question_number"],
                     question_text=q_data["question_text"],
-                    options=q_data["options"],
-                    correct_answer=q_data["correct_answer"],
-                    explanation=q_data["explanation"]
+                    options=q_data["options"]
+                    # correct_answer and explanation are None
                 )
                 questions.append(question)
             
@@ -163,12 +165,276 @@ class QuizService:
                 created_at=created_at
             )
             
-            logger.info(f"Successfully generated quiz '{quiz_id}' with {len(questions)} questions")
+            logger.info(f"Successfully generated quiz '{quiz_id}' with {len(questions)} questions (deferred evaluation)")
             return quiz
             
         except Exception as e:
             logger.error(f"Failed to generate quiz: {str(e)}")
             raise
+    
+    def submit_quiz_submission(
+        self,
+        quiz_id: str,
+        module_id: str,
+        user_answers: Dict[int, str],
+        time_taken_seconds: int
+    ) -> str:
+        """
+        Store quiz submission WITHOUT evaluation (Phase 3 - Deferred Evaluation).
+        
+        This method:
+        1. Generates a unique submission ID
+        2. Creates QuizSubmission object
+        3. Stores submission in cache
+        4. Returns submission ID
+        
+        Evaluation happens later when user explicitly requests it.
+        
+        Args:
+            quiz_id: Quiz identifier
+            module_id: Module identifier
+            user_answers: Map of question_number to selected_option
+            time_taken_seconds: Time taken to complete quiz
+            
+        Returns:
+            Submission ID
+            
+        Raises:
+            ValueError: If submission data is invalid
+        """
+        logger.info(f"Storing quiz submission for quiz '{quiz_id}'")
+        
+        # Validate inputs
+        if not user_answers:
+            raise ValueError("No answers provided")
+        
+        # Generate submission ID
+        from app.models import QuizSubmission
+        timestamp = datetime.now()
+        submission_id = f"sub_{hashlib.sha256(f'{quiz_id}_{timestamp.isoformat()}'.encode()).hexdigest()[:12]}"
+        
+        # Create submission object
+        submission = QuizSubmission(
+            submission_id=submission_id,
+            quiz_id=quiz_id,
+            module_id=module_id,
+            user_answers=user_answers,
+            time_taken_seconds=time_taken_seconds,
+            submitted_at=timestamp
+        )
+        
+        # Store in cache
+        self.cache_service.cache_quiz_submission(submission.model_dump())
+        
+        logger.info(f"Quiz submission stored: {submission_id}")
+        return submission_id
+    
+    def evaluate_quiz_submission(
+        self,
+        quiz_id: str,
+        module_id: str,
+        content: str
+    ) -> Dict[str, Any]:
+        """
+        Evaluate a quiz submission on-demand (Phase 3 - Deferred Evaluation).
+        
+        This method:
+        1. Retrieves quiz questions from cache
+        2. Retrieves submission from cache (by quiz_id)
+        3. Checks if legacy quiz (has correct_answer) → use embedded answers
+        4. If new quiz → call generate_quiz_answers_llm()
+        5. Computes score, accuracy, per-question results
+        6. Creates and stores QuizEvaluation
+        7. Returns evaluation
+        
+        Args:
+            quiz_id: Quiz identifier
+            module_id: Module identifier
+            content: Source educational content for LLM evaluation
+            
+        Returns:
+            Evaluation dictionary with score, accuracy, and detailed results
+            
+        Raises:
+            ValueError: If quiz or submission not found
+            RuntimeError: If LLM service fails
+        """
+        logger.info(f"Evaluating quiz submission for quiz '{quiz_id}'")
+        
+        # Retrieve quiz from history
+        quiz_history = self.cache_service.get_quiz_history(module_id)
+        if not quiz_history:
+            raise ValueError(f"No quiz history found for module '{module_id}'")
+        
+        # Find the specific quiz
+        quiz_data = None
+        for quiz in quiz_history:
+            if quiz.get("quiz_id") == quiz_id:
+                quiz_data = quiz
+                break
+        
+        if not quiz_data:
+            raise ValueError(f"Quiz '{quiz_id}' not found in history")
+        
+        # Retrieve submission by quiz_id
+        # Search through all submissions to find one matching this quiz_id
+        submission_data = None
+        quizzes_dir = self.cache_service.cache_dir / 'quizzes'
+        for sub_file in quizzes_dir.glob('submission_*.json'):
+            try:
+                json_data = sub_file.read_text(encoding='utf-8')
+                data = self.cache_service._deserialize_data(json_data)
+                if data.get("quiz_id") == quiz_id:
+                    submission_data = data
+                    break
+            except Exception:
+                continue
+        
+        if not submission_data:
+            raise ValueError(f"No submission found for quiz '{quiz_id}'")
+        
+        # Check if this is a legacy quiz (has correct_answer in questions)
+        questions_data = quiz_data.get("questions", [])
+        is_legacy = any(q.get("correct_answer") is not None for q in questions_data)
+        
+        if is_legacy:
+            # Legacy quiz - use embedded answers
+            logger.info(f"Quiz '{quiz_id}' is legacy - using embedded answers")
+            answers_data = [
+                {
+                    "question_number": q["question_number"],
+                    "correct_answer": q["correct_answer"],
+                    "explanation": q.get("explanation", "")
+                }
+                for q in questions_data
+            ]
+        else:
+            # New quiz - generate answers with LLM
+            logger.info(f"Quiz '{quiz_id}' is new - generating answers with LLM")
+            
+            # Get module info from roadmap
+            roadmap_data = self.cache_service.get_cached_roadmap()
+            if not roadmap_data:
+                raise ValueError("No roadmap found")
+            
+            module_info = None
+            for mod in roadmap_data.get("modules", []):
+                if mod.get("module_id") == module_id:
+                    module_info = mod
+                    break
+            
+            if not module_info:
+                raise ValueError(f"Module '{module_id}' not found in roadmap")
+            
+            # Call LLM to generate answers
+            try:
+                answers_data = self.llm_service.generate_quiz_answers_llm(
+                    module_info=module_info,
+                    questions=questions_data,
+                    content=content
+                )
+            except Exception as e:
+                logger.error(f"Failed to generate quiz answers: {str(e)}")
+                raise RuntimeError(f"LLM service failed: {str(e)}")
+        
+        # Evaluate submission
+        user_answers = submission_data.get("user_answers", {})
+        time_taken_seconds = submission_data.get("time_taken_seconds", 0)
+        
+        # Calculate score and build question results
+        from app.models import QuestionResult
+        question_results = []
+        correct_count = 0
+        incorrect_count = 0
+        
+        for i, q_data in enumerate(questions_data):
+            question_num = q_data["question_number"]
+            user_answer = user_answers.get(str(question_num), "")  # Convert to string for dict key
+            
+            # Find correct answer from answers_data
+            correct_answer = None
+            explanation = ""
+            for ans in answers_data:
+                if ans["question_number"] == question_num:
+                    correct_answer = ans["correct_answer"]
+                    explanation = ans.get("explanation", "")
+                    break
+            
+            if correct_answer is None:
+                raise ValueError(f"No answer found for question {question_num}")
+            
+            is_correct = user_answer == correct_answer
+            if is_correct:
+                correct_count += 1
+            else:
+                incorrect_count += 1
+            
+            question_results.append(QuestionResult(
+                question_number=question_num,
+                question_text=q_data["question_text"],
+                options=q_data["options"],
+                user_answer=user_answer,
+                correct_answer=correct_answer,
+                is_correct=is_correct,
+                explanation=explanation
+            ))
+        
+        # Calculate score and accuracy
+        score = correct_count
+        accuracy = (correct_count / len(questions_data)) * 100.0
+        
+        # Check time limit
+        time_limit_exceeded = False
+        if quiz_data.get("mode") == LearningMode.TIMED.value:
+            time_limit = quiz_data.get("time_limit_seconds")
+            if time_limit and time_taken_seconds > time_limit:
+                time_limit_exceeded = True
+        
+        # Create evaluation
+        from app.models import QuizEvaluation
+        evaluation_id = f"eval_{hashlib.sha256(f'{quiz_id}_{datetime.now().isoformat()}'.encode()).hexdigest()[:12]}"
+        
+        evaluation = QuizEvaluation(
+            evaluation_id=evaluation_id,
+            quiz_id=quiz_id,
+            module_id=module_id,
+            score=score,
+            accuracy=accuracy,
+            correct_answers_count=correct_count,
+            incorrect_answers_count=incorrect_count,
+            question_results=question_results,
+            time_taken_seconds=time_taken_seconds,
+            time_limit_exceeded=time_limit_exceeded,
+            evaluated_at=datetime.now()
+        )
+        
+        # Store evaluation
+        self.cache_service.cache_quiz_evaluation(evaluation.model_dump(mode='json'))
+        
+        logger.info(f"Quiz evaluation complete: score={score}/{len(questions_data)}, accuracy={accuracy:.1f}%")
+        
+        return evaluation.model_dump(mode='json')
+    
+    def get_quiz_evaluation(self, quiz_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve cached quiz evaluation.
+        
+        Args:
+            quiz_id: Quiz identifier
+            
+        Returns:
+            Evaluation dictionary if found, None otherwise
+        """
+        logger.info(f"Retrieving evaluation for quiz '{quiz_id}'")
+        
+        evaluation = self.cache_service.get_quiz_evaluation_by_quiz_id(quiz_id)
+        
+        if evaluation:
+            logger.info(f"Found evaluation for quiz '{quiz_id}'")
+        else:
+            logger.debug(f"No evaluation found for quiz '{quiz_id}'")
+        
+        return evaluation
     
     def evaluate_quiz(
         self,
@@ -177,7 +443,10 @@ class QuizService:
         time_taken_seconds: int
     ) -> QuizResult:
         """
-        Evaluate a quiz submission and calculate results.
+        Evaluate a quiz submission and calculate results (LEGACY METHOD).
+        
+        BACKWARD COMPATIBILITY: This method is retained for legacy quizzes
+        that have correct_answer embedded in questions.
         
         This method:
         1. Validates submitted answers against correct answers
@@ -199,7 +468,7 @@ class QuizService:
         Raises:
             ValueError: If answers are invalid
         """
-        logger.info(f"Evaluating quiz '{quiz.quiz_id}' with {len(answers)} answers")
+        logger.info(f"Evaluating quiz '{quiz.quiz_id}' with {len(answers)} answers (LEGACY)")
         
         # Validate answers
         if not answers:

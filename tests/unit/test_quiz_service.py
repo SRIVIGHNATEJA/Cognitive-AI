@@ -119,15 +119,14 @@ class TestQuizGeneration:
     @patch('app.services.quiz_service.LLMService')
     def test_generate_quiz_untimed(self, mock_llm_class, quiz_service, sample_module):
         """Test generating an untimed quiz."""
-        # Mock LLM service
+        # Mock LLM service (Phase 3 - questions only, no answers)
         mock_llm = Mock()
-        mock_llm.generate_quiz_llm.return_value = [
+        mock_llm.generate_quiz_questions_llm.return_value = [
             {
                 "question_number": i,
                 "question_text": f"Question {i}?",
-                "options": ["A", "B", "C", "D"],
-                "correct_answer": "B",
-                "explanation": f"Explanation {i}"
+                "options": ["A", "B", "C", "D"]
+                # No correct_answer or explanation
             }
             for i in range(1, 6)  # Changed to 5 questions
         ]
@@ -146,19 +145,23 @@ class TestQuizGeneration:
         assert quiz.time_limit_seconds is None
         assert len(quiz.questions) == 5  # Changed to 5
         assert quiz.quiz_id.startswith("quiz_")
+        
+        # Verify questions don't have correct_answer or explanation (Phase 3)
+        for question in quiz.questions:
+            assert question.correct_answer is None
+            assert question.explanation is None
     
     @patch('app.services.quiz_service.LLMService')
     def test_generate_quiz_timed(self, mock_llm_class, quiz_service, sample_module):
         """Test generating a timed quiz."""
-        # Mock LLM service
+        # Mock LLM service (Phase 3 - questions only, no answers)
         mock_llm = Mock()
-        mock_llm.generate_quiz_llm.return_value = [
+        mock_llm.generate_quiz_questions_llm.return_value = [
             {
                 "question_number": i,
                 "question_text": f"Question {i}?",
-                "options": ["A", "B", "C", "D"],
-                "correct_answer": "B",
-                "explanation": f"Explanation {i}"
+                "options": ["A", "B", "C", "D"]
+                # No correct_answer or explanation
             }
             for i in range(1, 6)  # Changed to 5 questions
         ]
@@ -176,6 +179,11 @@ class TestQuizGeneration:
         assert quiz.mode == LearningMode.TIMED
         assert quiz.time_limit_seconds == 600
         assert len(quiz.questions) == 5  # Changed to 5
+        
+        # Verify questions don't have correct_answer or explanation (Phase 3)
+        for question in quiz.questions:
+            assert question.correct_answer is None
+            assert question.explanation is None
     
     def test_generate_quiz_timed_without_time_limit_raises_error(self, quiz_service, sample_module):
         """Test that timed quiz without time limit raises error."""
@@ -197,13 +205,12 @@ class TestQuizGeneration:
         """Test that invalid question count raises error."""
         # Mock LLM service to return wrong number of questions
         mock_llm = Mock()
-        mock_llm.generate_quiz_llm.return_value = [
+        mock_llm.generate_quiz_questions_llm.return_value = [
             {
                 "question_number": 1,
                 "question_text": "Question 1?",
-                "options": ["A", "B", "C", "D"],
-                "correct_answer": "B",
-                "explanation": "Explanation"
+                "options": ["A", "B", "C", "D"]
+                # No correct_answer or explanation
             }
         ]  # Only 1 question instead of 5
         quiz_service.llm_service = mock_llm
@@ -505,3 +512,256 @@ class TestStoreQuizData:
         # Verify all 3 metrics are retained
         metrics = cache_service.get_quiz_metrics(module_id)
         assert metrics["total_quizzes"] == 3
+
+
+
+class TestDeferredEvaluation:
+    """Test Phase 3 deferred evaluation functionality."""
+    
+    def test_submit_quiz_submission(self, quiz_service, cache_service):
+        """Test storing quiz submission without evaluation."""
+        quiz_id = "quiz_test123"
+        module_id = "mod_test123"
+        user_answers = {1: "A", 2: "B", 3: "C", 4: "D", 5: "A"}
+        time_taken = 450
+        
+        # Submit quiz
+        submission_id = quiz_service.submit_quiz_submission(
+            quiz_id=quiz_id,
+            module_id=module_id,
+            user_answers=user_answers,
+            time_taken_seconds=time_taken
+        )
+        
+        # Verify submission ID format
+        assert submission_id.startswith("sub_")
+        assert len(submission_id) == 16  # "sub_" + 12 hex characters
+        
+        # Verify submission was stored
+        submission = cache_service.get_quiz_submission(submission_id)
+        assert submission is not None
+        assert submission["quiz_id"] == quiz_id
+        assert submission["module_id"] == module_id
+        # Note: JSON serialization converts int keys to strings
+        assert submission["user_answers"] == {str(k): v for k, v in user_answers.items()}
+        assert submission["time_taken_seconds"] == time_taken
+    
+    def test_submit_quiz_submission_empty_answers_raises_error(self, quiz_service):
+        """Test that submitting empty answers raises error."""
+        with pytest.raises(ValueError, match="No answers provided"):
+            quiz_service.submit_quiz_submission(
+                quiz_id="quiz_test123",
+                module_id="mod_test123",
+                user_answers={},
+                time_taken_seconds=300
+            )
+    
+    @patch('app.services.quiz_service.LLMService')
+    def test_evaluate_quiz_submission_legacy_quiz(
+        self,
+        mock_llm_class,
+        quiz_service,
+        cache_service,
+        sample_quiz_questions
+    ):
+        """Test evaluating a legacy quiz with embedded answers."""
+        module_id = "mod_test123"
+        quiz_id = "quiz_legacy123"
+        
+        # Create legacy quiz with embedded answers
+        quiz_data = {
+            "quiz_id": quiz_id,
+            "module_id": module_id,
+            "questions": [q.model_dump() for q in sample_quiz_questions],  # Has correct_answer
+            "mode": "untimed",
+            "time_limit_seconds": None,
+            "created_at": datetime.now().isoformat()
+        }
+        cache_service.cache_quiz_qa(module_id, quiz_data)
+        
+        # Create submission
+        user_answers = {1: "Option B1", 2: "Option B2", 3: "Option B3", 4: "Option B4", 5: "Option B5"}
+        submission_id = quiz_service.submit_quiz_submission(
+            quiz_id=quiz_id,
+            module_id=module_id,
+            user_answers=user_answers,
+            time_taken_seconds=400
+        )
+        
+        # Mock roadmap
+        roadmap_data = {
+            "modules": [{
+                "module_id": module_id,
+                "topic_name": "Test Topic",
+                "estimated_hours": 5.0
+            }]
+        }
+        cache_service.cache_roadmap(roadmap_data)
+        
+        # Evaluate (should use embedded answers, not call LLM)
+        evaluation = quiz_service.evaluate_quiz_submission(
+            quiz_id=quiz_id,
+            module_id=module_id,
+            content="Test content"
+        )
+        
+        # Verify evaluation
+        assert evaluation["quiz_id"] == quiz_id
+        assert evaluation["module_id"] == module_id
+        assert evaluation["score"] == 5  # All correct
+        assert evaluation["accuracy"] == 100.0
+        assert len(evaluation["question_results"]) == 5
+    
+    @patch('app.services.quiz_service.LLMService')
+    def test_evaluate_quiz_submission_new_quiz(
+        self,
+        mock_llm_class,
+        quiz_service,
+        cache_service
+    ):
+        """Test evaluating a new quiz (calls LLM for answers)."""
+        module_id = "mod_test123"
+        quiz_id = "quiz_new123"
+        
+        # Create new quiz WITHOUT embedded answers
+        questions_data = [
+            {
+                "question_number": i,
+                "question_text": f"Question {i}?",
+                "options": ["A", "B", "C", "D"],
+                "correct_answer": None,  # No embedded answer
+                "explanation": None
+            }
+            for i in range(1, 6)
+        ]
+        
+        quiz_data = {
+            "quiz_id": quiz_id,
+            "module_id": module_id,
+            "questions": questions_data,
+            "mode": "untimed",
+            "time_limit_seconds": None,
+            "created_at": datetime.now().isoformat()
+        }
+        cache_service.cache_quiz_qa(module_id, quiz_data)
+        
+        # Create submission
+        user_answers = {1: "B", 2: "B", 3: "B", 4: "B", 5: "B"}
+        submission_id = quiz_service.submit_quiz_submission(
+            quiz_id=quiz_id,
+            module_id=module_id,
+            user_answers=user_answers,
+            time_taken_seconds=400
+        )
+        
+        # Mock roadmap
+        roadmap_data = {
+            "modules": [{
+                "module_id": module_id,
+                "topic_name": "Test Topic",
+                "estimated_hours": 5.0
+            }]
+        }
+        cache_service.cache_roadmap(roadmap_data)
+        
+        # Mock LLM to return answers
+        mock_llm = Mock()
+        mock_llm.generate_quiz_answers_llm.return_value = [
+            {
+                "question_number": i,
+                "correct_answer": "B",
+                "explanation": f"Explanation {i}"
+            }
+            for i in range(1, 6)
+        ]
+        quiz_service.llm_service = mock_llm
+        
+        # Evaluate (should call LLM for answers)
+        evaluation = quiz_service.evaluate_quiz_submission(
+            quiz_id=quiz_id,
+            module_id=module_id,
+            content="Test content"
+        )
+        
+        # Verify evaluation
+        assert evaluation["quiz_id"] == quiz_id
+        assert evaluation["module_id"] == module_id
+        assert evaluation["score"] == 5  # All correct
+        assert evaluation["accuracy"] == 100.0
+        assert len(evaluation["question_results"]) == 5
+        
+        # Verify LLM was called
+        mock_llm.generate_quiz_answers_llm.assert_called_once()
+    
+    def test_get_quiz_evaluation_exists(self, quiz_service, cache_service):
+        """Test retrieving existing evaluation."""
+        quiz_id = "quiz_test123"
+        evaluation_id = "eval_test123"
+        
+        # Store evaluation
+        evaluation_data = {
+            "evaluation_id": evaluation_id,
+            "quiz_id": quiz_id,
+            "module_id": "mod_test123",
+            "score": 4,
+            "accuracy": 80.0,
+            "correct_answers_count": 4,
+            "incorrect_answers_count": 1,
+            "question_results": [],
+            "time_taken_seconds": 400,
+            "time_limit_exceeded": False,
+            "evaluated_at": datetime.now().isoformat()
+        }
+        cache_service.cache_quiz_evaluation(evaluation_data)
+        
+        # Retrieve evaluation
+        retrieved = quiz_service.get_quiz_evaluation(quiz_id)
+        
+        # Verify
+        assert retrieved is not None
+        assert retrieved["quiz_id"] == quiz_id
+        assert retrieved["score"] == 4
+        assert retrieved["accuracy"] == 80.0
+    
+    def test_get_quiz_evaluation_not_found(self, quiz_service):
+        """Test retrieving non-existent evaluation returns None."""
+        evaluation = quiz_service.get_quiz_evaluation("quiz_nonexistent")
+        assert evaluation is None
+    
+    def test_evaluate_quiz_submission_quiz_not_found(self, quiz_service, cache_service):
+        """Test that evaluating non-existent quiz raises error."""
+        with pytest.raises(ValueError, match="No quiz history found"):
+            quiz_service.evaluate_quiz_submission(
+                quiz_id="quiz_nonexistent",
+                module_id="mod_nonexistent",
+                content="Test content"
+            )
+    
+    def test_evaluate_quiz_submission_submission_not_found(
+        self,
+        quiz_service,
+        cache_service,
+        sample_quiz_questions
+    ):
+        """Test that evaluating without submission raises error."""
+        module_id = "mod_test123"
+        quiz_id = "quiz_test123"
+        
+        # Create quiz but no submission
+        quiz_data = {
+            "quiz_id": quiz_id,
+            "module_id": module_id,
+            "questions": [q.model_dump() for q in sample_quiz_questions],
+            "mode": "untimed",
+            "time_limit_seconds": None,
+            "created_at": datetime.now().isoformat()
+        }
+        cache_service.cache_quiz_qa(module_id, quiz_data)
+        
+        # Try to evaluate without submission
+        with pytest.raises(ValueError, match="No submission found"):
+            quiz_service.evaluate_quiz_submission(
+                quiz_id=quiz_id,
+                module_id=module_id,
+                content="Test content"
+            )
