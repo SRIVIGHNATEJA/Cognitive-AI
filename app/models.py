@@ -4,7 +4,7 @@ Defines Pydantic models for requests, responses, and domain entities.
 """
 
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from enum import Enum
 from fastapi import UploadFile
@@ -291,13 +291,21 @@ class QuizQuestion(BaseModel):
     """
     A single multiple-choice question in a quiz.
     
-    Each question has exactly 4 options with one correct answer.
+    Each question has exactly 4 options.
+    
+    LIFECYCLE:
+    - Generation: Only question_text and options are generated
+    - Evaluation: correct_answer and explanation are generated on-demand
+    
+    BACKWARD COMPATIBILITY:
+    - Old quizzes may have correct_answer and explanation embedded
+    - New quizzes will have these fields as None until evaluation
     """
     question_number: int = Field(..., ge=1, le=5, description="Question number (1-5)")
     question_text: str = Field(..., min_length=10, description="The question text")
     options: list[str] = Field(..., min_length=4, max_length=4, description="Exactly 4 answer options")
-    correct_answer: str = Field(..., description="The correct answer (must be one of the options)")
-    explanation: str = Field(..., max_length=200, description="One-line explanation (max 200 chars)")
+    correct_answer: Optional[str] = Field(None, description="The correct answer (generated during evaluation)")
+    explanation: Optional[str] = Field(None, max_length=200, description="One-line explanation (generated during evaluation)")
     
     model_config = {
         "json_schema_extra": {
@@ -305,8 +313,8 @@ class QuizQuestion(BaseModel):
                 "question_number": 1,
                 "question_text": "What is the output of print(2 ** 3) in Python?",
                 "options": ["6", "8", "9", "16"],
-                "correct_answer": "8",
-                "explanation": "The ** operator performs exponentiation, so 2^3 = 8"
+                "correct_answer": None,
+                "explanation": None
             }
         }
     }
@@ -318,6 +326,11 @@ class Quiz(BaseModel):
     
     Contains exactly 5 questions and can be timed or untimed.
     Quiz ID is deterministic based on module_id and creation timestamp.
+    
+    LIFECYCLE:
+    - Generation: Questions without correct answers/explanations
+    - Submission: User answers stored separately
+    - Evaluation: Correct answers generated and compared with user answers
     """
     quiz_id: str = Field(..., description="Deterministic quiz identifier")
     module_id: str = Field(..., description="Module this quiz belongs to")
@@ -331,10 +344,133 @@ class Quiz(BaseModel):
             "example": {
                 "quiz_id": "quiz_abc123def456",
                 "module_id": "mod_abc123",
-                "questions": [],  # List of 10 QuizQuestion objects
+                "questions": [],  # List of 5 QuizQuestion objects
                 "mode": "timed",
                 "time_limit_seconds": 600,
                 "created_at": "2024-01-07T10:30:00.123456"
+            }
+        }
+    }
+
+
+class QuizSubmission(BaseModel):
+    """
+    User's submitted answers before evaluation.
+    
+    LIFECYCLE:
+    - Created when user submits quiz answers
+    - Stored separately from quiz questions
+    - Used later during evaluation to compare with correct answers
+    
+    This model separates answer submission from evaluation, enabling:
+    - Deferred evaluation (user controls when to see results)
+    - Better analytics (explicit submission tracking)
+    - Flexible evaluation strategies
+    """
+    submission_id: str = Field(..., description="Unique submission identifier")
+    quiz_id: str = Field(..., description="Quiz identifier")
+    module_id: str = Field(..., description="Module identifier")
+    user_answers: Dict[int, str] = Field(..., description="Map of question_number to selected_option")
+    time_taken_seconds: int = Field(..., ge=0, description="Time taken to complete quiz")
+    submitted_at: datetime = Field(default_factory=datetime.now, description="Submission timestamp")
+    
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "submission_id": "sub_abc123def456",
+                "quiz_id": "quiz_abc123def456",
+                "module_id": "mod_abc123",
+                "user_answers": {
+                    1: "8",
+                    2: "list",
+                    3: "True",
+                    4: "O(n)",
+                    5: "def"
+                },
+                "time_taken_seconds": 450,
+                "submitted_at": "2024-01-07T10:45:00"
+            }
+        }
+    }
+
+
+class QuestionResult(BaseModel):
+    """
+    Evaluation result for a single question.
+    
+    Contains the question, user's answer, correct answer, and explanation.
+    Used in QuizEvaluation to provide detailed per-question feedback.
+    """
+    question_number: int = Field(..., ge=1, le=5, description="Question number")
+    question_text: str = Field(..., description="The question text")
+    options: list[str] = Field(..., description="Answer options")
+    user_answer: str = Field(..., description="User's selected answer")
+    correct_answer: str = Field(..., description="The correct answer")
+    is_correct: bool = Field(..., description="Whether user's answer is correct")
+    explanation: str = Field(..., description="Explanation of the correct answer")
+    
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "question_number": 1,
+                "question_text": "What is the output of print(2 ** 3) in Python?",
+                "options": ["6", "8", "9", "16"],
+                "user_answer": "8",
+                "correct_answer": "8",
+                "is_correct": True,
+                "explanation": "The ** operator performs exponentiation, so 2^3 = 8"
+            }
+        }
+    }
+
+
+class QuizEvaluation(BaseModel):
+    """
+    Evaluation results with correct answers and scoring.
+    
+    LIFECYCLE:
+    - Created when user explicitly requests evaluation
+    - Correct answers and explanations generated by LLM during evaluation
+    - Stored permanently for analytics and future reference
+    
+    This model enables:
+    - Explicit evaluation on user demand
+    - Permanent storage of evaluation results
+    - Rich analytics and progress tracking
+    - Re-viewing results without re-evaluation
+    """
+    evaluation_id: str = Field(..., description="Unique evaluation identifier")
+    quiz_id: str = Field(..., description="Quiz identifier")
+    module_id: str = Field(..., description="Module identifier")
+    
+    # Scoring
+    score: int = Field(..., ge=0, le=5, description="Score out of 5")
+    accuracy: float = Field(..., ge=0, le=100, description="Accuracy percentage")
+    correct_answers_count: int = Field(..., ge=0, le=5, description="Number of correct answers")
+    incorrect_answers_count: int = Field(..., ge=0, le=5, description="Number of incorrect answers")
+    
+    # Per-question results
+    question_results: List[QuestionResult] = Field(..., description="Detailed results for each question")
+    
+    # Metadata
+    time_taken_seconds: int = Field(..., ge=0, description="Time taken to complete quiz")
+    time_limit_exceeded: bool = Field(default=False, description="Whether time limit was exceeded")
+    evaluated_at: datetime = Field(default_factory=datetime.now, description="Evaluation timestamp")
+    
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "evaluation_id": "eval_abc123def456",
+                "quiz_id": "quiz_abc123def456",
+                "module_id": "mod_abc123",
+                "score": 4,
+                "accuracy": 80.0,
+                "correct_answers_count": 4,
+                "incorrect_answers_count": 1,
+                "question_results": [],
+                "time_taken_seconds": 450,
+                "time_limit_exceeded": False,
+                "evaluated_at": "2024-01-07T10:50:00"
             }
         }
     }

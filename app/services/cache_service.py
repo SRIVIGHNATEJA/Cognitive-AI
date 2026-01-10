@@ -629,6 +629,150 @@ class CacheService:
         except Exception as e:
             logger.error(f"Failed to retrieve cached analytics: {str(e)}")
             return None
+    
+    def cache_quiz_submission(self, submission_data: Dict[str, Any]) -> None:
+        """
+        Cache quiz submission data.
+        
+        Submissions are stored separately from quizzes to enable deferred evaluation.
+        
+        Args:
+            submission_data: Submission data to cache (should be JSON-serializable)
+        """
+        try:
+            submission_id = submission_data.get("submission_id")
+            quiz_id = submission_data.get("quiz_id")
+            
+            if not submission_id or not quiz_id:
+                raise ValueError("submission_id and quiz_id are required")
+            
+            cache_file = self.cache_dir / 'quizzes' / f'submission_{submission_id}.json'
+            json_data = self._serialize_data(submission_data)
+            
+            cache_file.write_text(json_data, encoding='utf-8')
+            logger.info(f"Cached quiz submission: {submission_id} for quiz {quiz_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to cache quiz submission: {str(e)}")
+            raise
+    
+    def get_quiz_submission(self, submission_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve cached quiz submission.
+        
+        Args:
+            submission_id: Submission identifier
+            
+        Returns:
+            Submission data if found, None otherwise
+        """
+        try:
+            cache_file = self.cache_dir / 'quizzes' / f'submission_{submission_id}.json'
+            
+            if not cache_file.exists():
+                logger.debug(f"Submission cache miss: {submission_id}")
+                return None
+            
+            json_data = cache_file.read_text(encoding='utf-8')
+            data = self._deserialize_data(json_data)
+            
+            logger.info(f"Submission cache hit: {submission_id}")
+            return data
+            
+        except Exception as e:
+            logger.error(f"Failed to retrieve submission {submission_id}: {str(e)}")
+            return None
+    
+    def cache_quiz_evaluation(self, evaluation_data: Dict[str, Any]) -> None:
+        """
+        Cache quiz evaluation results.
+        
+        Evaluations are stored permanently for analytics and future reference.
+        
+        Args:
+            evaluation_data: Evaluation data to cache (should be JSON-serializable)
+        """
+        try:
+            evaluation_id = evaluation_data.get("evaluation_id")
+            quiz_id = evaluation_data.get("quiz_id")
+            
+            if not evaluation_id or not quiz_id:
+                raise ValueError("evaluation_id and quiz_id are required")
+            
+            cache_file = self.cache_dir / 'quizzes' / f'evaluation_{evaluation_id}.json'
+            json_data = self._serialize_data(evaluation_data)
+            
+            cache_file.write_text(json_data, encoding='utf-8')
+            logger.info(f"Cached quiz evaluation: {evaluation_id} for quiz {quiz_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to cache quiz evaluation: {str(e)}")
+            raise
+    
+    def get_quiz_evaluation(self, evaluation_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve cached quiz evaluation.
+        
+        Args:
+            evaluation_id: Evaluation identifier
+            
+        Returns:
+            Evaluation data if found, None otherwise
+        """
+        try:
+            cache_file = self.cache_dir / 'quizzes' / f'evaluation_{evaluation_id}.json'
+            
+            if not cache_file.exists():
+                logger.debug(f"Evaluation cache miss: {evaluation_id}")
+                return None
+            
+            json_data = cache_file.read_text(encoding='utf-8')
+            data = self._deserialize_data(json_data)
+            
+            logger.info(f"Evaluation cache hit: {evaluation_id}")
+            return data
+            
+        except Exception as e:
+            logger.error(f"Failed to retrieve evaluation {evaluation_id}: {str(e)}")
+            return None
+    
+    def get_quiz_evaluation_by_quiz_id(self, quiz_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve quiz evaluation by quiz_id.
+        
+        Searches through all evaluation files to find one matching the quiz_id.
+        
+        Args:
+            quiz_id: Quiz identifier
+            
+        Returns:
+            Evaluation data if found, None otherwise
+        """
+        try:
+            quizzes_dir = self.cache_dir / 'quizzes'
+            
+            if not quizzes_dir.exists():
+                return None
+            
+            # Search through all evaluation files
+            for eval_file in quizzes_dir.glob('evaluation_*.json'):
+                try:
+                    json_data = eval_file.read_text(encoding='utf-8')
+                    data = self._deserialize_data(json_data)
+                    
+                    if data.get("quiz_id") == quiz_id:
+                        logger.info(f"Found evaluation for quiz {quiz_id}")
+                        return data
+                except Exception as e:
+                    logger.warning(f"Failed to read evaluation file {eval_file}: {str(e)}")
+                    continue
+            
+            logger.debug(f"No evaluation found for quiz {quiz_id}")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Failed to search for evaluation by quiz_id {quiz_id}: {str(e)}")
+            return None
 
 
 # Global cache service instance
