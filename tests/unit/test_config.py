@@ -43,7 +43,7 @@ def test_quiz_configuration():
     """Test quiz-related configuration defaults."""
     settings = Settings()
     
-    assert settings.quiz_questions_count == 10
+    assert settings.quiz_questions_count == 5
     assert settings.quiz_options_count == 4
     assert settings.quiz_explanation_max_length == 200
     assert settings.quiz_history_retention == 2

@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     cache_dir: str = "cache"
     
     # Quiz Settings
-    quiz_questions_count: int = 10
+    quiz_questions_count: int = 5  # Optimized for small models (qwen2.5:1.5b)
     quiz_options_count: int = 4
     quiz_explanation_max_length: int = 200
     quiz_history_retention: int = 2  # Keep last 2 quizzes Q&A

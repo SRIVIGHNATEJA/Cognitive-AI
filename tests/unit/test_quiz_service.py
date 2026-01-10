@@ -57,7 +57,7 @@ def sample_module():
 def sample_quiz_questions():
     """Provide sample quiz questions for testing."""
     questions = []
-    for i in range(1, 11):
+    for i in range(1, 6):  # Changed to 5 questions
         question = QuizQuestion(
             question_number=i,
             question_text=f"What is the answer to question {i}?",
@@ -129,7 +129,7 @@ class TestQuizGeneration:
                 "correct_answer": "B",
                 "explanation": f"Explanation {i}"
             }
-            for i in range(1, 11)
+            for i in range(1, 6)  # Changed to 5 questions
         ]
         quiz_service.llm_service = mock_llm
         
@@ -144,7 +144,7 @@ class TestQuizGeneration:
         assert quiz.module_id == sample_module.module_id
         assert quiz.mode == LearningMode.UNTIMED
         assert quiz.time_limit_seconds is None
-        assert len(quiz.questions) == 10
+        assert len(quiz.questions) == 5  # Changed to 5
         assert quiz.quiz_id.startswith("quiz_")
     
     @patch('app.services.quiz_service.LLMService')
@@ -160,7 +160,7 @@ class TestQuizGeneration:
                 "correct_answer": "B",
                 "explanation": f"Explanation {i}"
             }
-            for i in range(1, 11)
+            for i in range(1, 6)  # Changed to 5 questions
         ]
         quiz_service.llm_service = mock_llm
         
@@ -175,7 +175,7 @@ class TestQuizGeneration:
         # Verify quiz structure
         assert quiz.mode == LearningMode.TIMED
         assert quiz.time_limit_seconds == 600
-        assert len(quiz.questions) == 10
+        assert len(quiz.questions) == 5  # Changed to 5
     
     def test_generate_quiz_timed_without_time_limit_raises_error(self, quiz_service, sample_module):
         """Test that timed quiz without time limit raises error."""
@@ -205,7 +205,7 @@ class TestQuizGeneration:
                 "correct_answer": "B",
                 "explanation": "Explanation"
             }
-        ]  # Only 1 question instead of 10
+        ]  # Only 1 question instead of 5
         quiz_service.llm_service = mock_llm
         
         with pytest.raises(ValueError, match="invalid number of questions"):
@@ -232,15 +232,15 @@ class TestQuizEvaluation:
         )
         
         # All correct answers
-        answers = {i: f"Option B{i}" for i in range(1, 11)}
+        answers = {i: f"Option B{i}" for i in range(1, 6)}  # Changed to 5
         
         # Evaluate
         result = quiz_service.evaluate_quiz(quiz, answers, time_taken_seconds=300)
         
         # Verify results
-        assert result.score == 10
+        assert result.score == 5  # Changed to 5
         assert result.accuracy == 100.0
-        assert result.correct_answers == 10
+        assert result.correct_answers == 5  # Changed to 5
         assert result.incorrect_answers == 0
         assert result.time_taken_seconds == 300
         assert result.time_limit_exceeded is False
@@ -257,10 +257,10 @@ class TestQuizEvaluation:
             created_at=datetime.now()
         )
         
-        # 7 correct, 3 incorrect
+        # 3 correct, 2 incorrect
         answers = {}
-        for i in range(1, 11):
-            if i <= 7:
+        for i in range(1, 6):  # Changed to 5
+            if i <= 3:  # Changed to 3
                 answers[i] = f"Option B{i}"  # Correct
             else:
                 answers[i] = f"Option A{i}"  # Incorrect
@@ -269,10 +269,10 @@ class TestQuizEvaluation:
         result = quiz_service.evaluate_quiz(quiz, answers, time_taken_seconds=450)
         
         # Verify results
-        assert result.score == 7
-        assert result.accuracy == 70.0
-        assert result.correct_answers == 7
-        assert result.incorrect_answers == 3
+        assert result.score == 3  # Changed to 3
+        assert result.accuracy == 60.0  # 3/5 = 60%
+        assert result.correct_answers == 3  # Changed to 3
+        assert result.incorrect_answers == 2  # Changed to 2
     
     def test_evaluate_quiz_time_limit_not_exceeded(self, quiz_service, sample_quiz_questions):
         """Test that time limit not exceeded is recorded correctly."""
@@ -286,14 +286,14 @@ class TestQuizEvaluation:
             created_at=datetime.now()
         )
         
-        answers = {i: f"Option B{i}" for i in range(1, 11)}
+        answers = {i: f"Option B{i}" for i in range(1, 6)}  # Changed to 5
         
         # Evaluate with time under limit
         result = quiz_service.evaluate_quiz(quiz, answers, time_taken_seconds=500)
         
         # Verify time limit not exceeded
         assert result.time_limit_exceeded is False
-        assert result.score == 10  # Score not affected by time
+        assert result.score == 5  # Changed to 5 - Score not affected by time
     
     def test_evaluate_quiz_time_limit_exceeded(self, quiz_service, sample_quiz_questions):
         """Test that time limit exceeded is recorded correctly."""
@@ -307,14 +307,14 @@ class TestQuizEvaluation:
             created_at=datetime.now()
         )
         
-        answers = {i: f"Option B{i}" for i in range(1, 11)}
+        answers = {i: f"Option B{i}" for i in range(1, 6)}  # Changed to 5
         
         # Evaluate with time over limit
         result = quiz_service.evaluate_quiz(quiz, answers, time_taken_seconds=700)
         
         # Verify time limit exceeded but score still calculated
         assert result.time_limit_exceeded is True
-        assert result.score == 10  # Score not affected by time (backend accepts all)
+        assert result.score == 5  # Changed to 5 - Score not affected by time (backend accepts all)
     
     def test_evaluate_quiz_empty_answers_raises_error(self, quiz_service, sample_quiz_questions):
         """Test that empty answers raise error."""
@@ -341,12 +341,12 @@ class TestQuizMetrics:
         result = QuizResult(
             quiz_id="quiz_001",
             module_id=module_id,
-            score=8,
+            score=4,
             accuracy=80.0,
             time_taken_seconds=400,
             time_limit_exceeded=False,
-            correct_answers=8,
-            incorrect_answers=2,
+            correct_answers=4,
+            incorrect_answers=1,
             submitted_at=datetime.now()
         )
         
@@ -359,9 +359,9 @@ class TestQuizMetrics:
         # Verify metrics
         assert metrics is not None
         assert metrics["total_quizzes"] == 1
-        assert metrics["average_score"] == 8.0
-        assert metrics["best_score"] == 8
-        assert metrics["worst_score"] == 8
+        assert metrics["average_score"] == 4.0
+        assert metrics["best_score"] == 4
+        assert metrics["worst_score"] == 4
         assert metrics["average_accuracy"] == 80.0
     
     def test_update_quiz_metrics_multiple_quizzes(self, quiz_service, cache_service):
@@ -372,12 +372,12 @@ class TestQuizMetrics:
         result1 = QuizResult(
             quiz_id="quiz_001",
             module_id=module_id,
-            score=8,
+            score=4,
             accuracy=80.0,
             time_taken_seconds=400,
             time_limit_exceeded=False,
-            correct_answers=8,
-            incorrect_answers=2,
+            correct_answers=4,
+            incorrect_answers=1,
             submitted_at=datetime.now()
         )
         quiz_service._update_quiz_metrics(module_id, result1)
@@ -386,12 +386,12 @@ class TestQuizMetrics:
         result2 = QuizResult(
             quiz_id="quiz_002",
             module_id=module_id,
-            score=6,
+            score=3,
             accuracy=60.0,
             time_taken_seconds=500,
             time_limit_exceeded=False,
-            correct_answers=6,
-            incorrect_answers=4,
+            correct_answers=3,
+            incorrect_answers=2,
             submitted_at=datetime.now()
         )
         quiz_service._update_quiz_metrics(module_id, result2)
@@ -401,9 +401,9 @@ class TestQuizMetrics:
         
         # Verify aggregated metrics
         assert metrics["total_quizzes"] == 2
-        assert metrics["average_score"] == 7.0  # (8 + 6) / 2
-        assert metrics["best_score"] == 8
-        assert metrics["worst_score"] == 6
+        assert metrics["average_score"] == 3.5  # (4 + 3) / 2
+        assert metrics["best_score"] == 4
+        assert metrics["worst_score"] == 3
         assert metrics["average_accuracy"] == 70.0  # (80 + 60) / 2
 
 
@@ -487,12 +487,12 @@ class TestStoreQuizData:
             result = QuizResult(
                 quiz_id=quiz.quiz_id,
                 module_id=module_id,
-                score=8,
+                score=4,
                 accuracy=80.0,
                 time_taken_seconds=400,
                 time_limit_exceeded=False,
-                correct_answers=8,
-                incorrect_answers=2,
+                correct_answers=4,
+                incorrect_answers=1,
                 submitted_at=datetime.now()
             )
             

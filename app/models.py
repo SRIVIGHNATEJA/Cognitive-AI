@@ -293,7 +293,7 @@ class QuizQuestion(BaseModel):
     
     Each question has exactly 4 options with one correct answer.
     """
-    question_number: int = Field(..., ge=1, le=10, description="Question number (1-10)")
+    question_number: int = Field(..., ge=1, le=5, description="Question number (1-5)")
     question_text: str = Field(..., min_length=10, description="The question text")
     options: list[str] = Field(..., min_length=4, max_length=4, description="Exactly 4 answer options")
     correct_answer: str = Field(..., description="The correct answer (must be one of the options)")
@@ -316,12 +316,12 @@ class Quiz(BaseModel):
     """
     A complete quiz for a module.
     
-    Contains exactly 10 questions and can be timed or untimed.
+    Contains exactly 5 questions and can be timed or untimed.
     Quiz ID is deterministic based on module_id and creation timestamp.
     """
     quiz_id: str = Field(..., description="Deterministic quiz identifier")
     module_id: str = Field(..., description="Module this quiz belongs to")
-    questions: list[QuizQuestion] = Field(..., min_length=10, max_length=10, description="Exactly 10 questions")
+    questions: list[QuizQuestion] = Field(..., min_length=5, max_length=5, description="Exactly 5 questions")
     mode: LearningMode = Field(..., description="Quiz mode (timed or untimed)")
     time_limit_seconds: Optional[int] = Field(None, gt=0, description="Time limit in seconds (for timed mode)")
     created_at: datetime = Field(default_factory=datetime.now, description="Quiz creation timestamp")
@@ -348,12 +348,12 @@ class QuizResult(BaseModel):
     """
     quiz_id: str = Field(..., description="Quiz identifier")
     module_id: str = Field(..., description="Module identifier")
-    score: int = Field(..., ge=0, le=10, description="Score out of 10")
+    score: int = Field(..., ge=0, le=5, description="Score out of 5")
     accuracy: float = Field(..., ge=0, le=100, description="Accuracy percentage")
     time_taken_seconds: int = Field(..., ge=0, description="Time taken to complete quiz")
     time_limit_exceeded: bool = Field(default=False, description="Whether time limit was exceeded (for timed quizzes)")
-    correct_answers: int = Field(..., ge=0, le=10, description="Number of correct answers")
-    incorrect_answers: int = Field(..., ge=0, le=10, description="Number of incorrect answers")
+    correct_answers: int = Field(..., ge=0, le=5, description="Number of correct answers")
+    incorrect_answers: int = Field(..., ge=0, le=5, description="Number of incorrect answers")
     submitted_at: datetime = Field(default_factory=datetime.now, description="Submission timestamp")
     
     model_config = {
@@ -381,9 +381,9 @@ class QuizMetrics(BaseModel):
     """
     module_id: str = Field(..., description="Module identifier")
     total_quizzes: int = Field(..., ge=0, description="Total number of quizzes taken")
-    average_score: float = Field(..., ge=0, le=10, description="Average score across all quizzes")
-    best_score: int = Field(..., ge=0, le=10, description="Best score achieved")
-    worst_score: int = Field(..., ge=0, le=10, description="Worst score achieved")
+    average_score: float = Field(..., ge=0, le=5, description="Average score across all quizzes")
+    best_score: int = Field(..., ge=0, le=5, description="Best score achieved")
+    worst_score: int = Field(..., ge=0, le=5, description="Worst score achieved")
     average_accuracy: float = Field(..., ge=0, le=100, description="Average accuracy percentage")
     
     model_config = {
@@ -441,7 +441,7 @@ class QuizResponse(BaseModel):
     success: bool = True
     quiz_id: str = Field(..., description="Quiz identifier")
     module_id: str = Field(..., description="Module identifier")
-    questions: list[QuizQuestion] = Field(..., description="List of 10 quiz questions")
+    questions: list[QuizQuestion] = Field(..., description="List of 5 quiz questions")
     mode: LearningMode = Field(..., description="Quiz mode")
     time_limit_seconds: Optional[int] = Field(None, description="Time limit in seconds (for timed mode)")
     
@@ -464,7 +464,7 @@ class QuizResultResponse(BaseModel):
     success: bool = True
     quiz_id: str = Field(..., description="Quiz identifier")
     module_id: str = Field(..., description="Module identifier")
-    score: int = Field(..., description="Score out of 10")
+    score: int = Field(..., description="Score out of 5")
     accuracy: float = Field(..., description="Accuracy percentage")
     time_taken_seconds: int = Field(..., description="Time taken")
     time_limit_exceeded: bool = Field(..., description="Whether time limit was exceeded")

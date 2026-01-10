@@ -65,7 +65,14 @@ def _get_module_from_roadmap(module_id: str) -> Module:
 
 def _get_module_content(module_id: str) -> str:
     """
-    Helper function to get module content (notes or input text) for quiz generation.
+    Helper function to get module-scoped content for quiz generation.
+    
+    Implements strict fallback order:
+    1. Module Notes (preferred)
+    2. Module Cheat Sheet (fallback)
+    3. Full input text (last resort - not ideal but prevents failure)
+    
+    NEVER concatenates multiple sources - uses FIRST available only.
     
     Args:
         module_id: Module identifier
@@ -74,19 +81,28 @@ def _get_module_content(module_id: str) -> str:
         Module content text
         
     Raises:
-        HTTPException 404: If content not found
+        HTTPException 404: If no content available
     """
-    # Try to get cached notes first
+    # Fallback 1: Try module notes (preferred - most focused)
     notes = cache_service.get_cached_content(module_id, 'notes')
     if notes:
+        logger.info(f"Quiz generation using MODULE NOTES for {module_id}")
         return notes
     
-    # Fall back to input text
+    # Fallback 2: Try module cheat sheet (good alternative)
+    cheat_sheet = cache_service.get_cached_content(module_id, 'cheat_sheet')
+    if cheat_sheet:
+        logger.info(f"Quiz generation using MODULE CHEAT SHEET for {module_id}")
+        return cheat_sheet
+    
+    # Fallback 3: Use full input text (last resort)
+    # Note: This is not ideal as it's not module-scoped, but prevents complete failure
+    # User should generate notes/cheat sheet first for best results
     roadmap_data = cache_service.get_cached_roadmap()
     if not roadmap_data or "input_id" not in roadmap_data:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No content available for quiz generation. Please generate notes first."
+            detail="No content available for quiz generation. Please generate notes or cheat sheet first."
         )
     
     input_id = roadmap_data["input_id"]
@@ -98,6 +114,7 @@ def _get_module_content(module_id: str) -> str:
             detail=f"Input text not found for ID '{input_id}'"
         )
     
+    logger.warning(f"Quiz generation using FULL INPUT TEXT for {module_id} - recommend generating notes first")
     return cached_input['extracted_text']
 
 
@@ -108,8 +125,8 @@ async def generate_quiz(module_id: str, request: QuizGenerateRequest = Body(...)
     
     This endpoint:
     1. Validates that the module exists in the roadmap
-    2. Retrieves module content (notes or input text)
-    3. Generates quiz using LLM (10 MCQs with 4 options each)
+    2. Retrieves module-scoped content (notes → cheat sheet → input text fallback)
+    3. Generates quiz using LLM (5 MCQs with 4 options each)
     4. Stores quiz Q&A data in cache
     5. Returns the quiz
     
@@ -291,7 +308,7 @@ async def submit_quiz(module_id: str, request: QuizSubmitRequest = Body(...)) ->
                 "explanation": question.explanation
             })
         
-        logger.info(f"Quiz evaluation complete: score={result.score}/10")
+        logger.info(f"Quiz evaluation complete: score={result.score}/{len(quiz.questions)}")
         
         return QuizResultResponse(
             success=True,

@@ -94,8 +94,8 @@ class QuizService:
         Generate a quiz for a module using LLM.
         
         This method:
-        1. Calls LLM service to generate 10 MCQ questions
-        2. Validates quiz structure (10 questions, 4 options each)
+        1. Calls LLM service to generate 5 MCQ questions
+        2. Validates quiz structure (5 questions, 4 options each)
         3. Assigns deterministic quiz ID
         4. Returns Quiz object
         
@@ -106,7 +106,7 @@ class QuizService:
             time_limit_seconds: Time limit in seconds (required for timed mode)
             
         Returns:
-            Quiz object with 10 questions
+            Quiz object with 5 questions
             
         Raises:
             ValueError: If quiz generation fails or validation fails
@@ -132,7 +132,7 @@ class QuizService:
                 content=content
             )
             
-            if not questions_data or len(questions_data) != 10:
+            if not questions_data or len(questions_data) != 5:
                 raise ValueError(f"LLM generated invalid number of questions: {len(questions_data) if questions_data else 0}")
             
             logger.info(f"LLM generated {len(questions_data)} questions")
@@ -250,7 +250,7 @@ class QuizService:
         )
         
         logger.info(
-            f"Quiz evaluation complete: score={score}/10, "
+            f"Quiz evaluation complete: score={score}/{len(quiz.questions)}, "
             f"accuracy={accuracy:.1f}%, time={time_taken_seconds}s"
         )
         

@@ -246,7 +246,7 @@ else:
                         # Set current module and navigate to quiz page
                         st.session_state.current_module_id = module_id
                         st.session_state.current_module = module
-                        st.info("Go to the **Quiz** page to test your knowledge.")
+                        st.switch_page("pages/4_🧪_Quiz.py")
     
     st.divider()
     

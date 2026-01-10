@@ -84,7 +84,7 @@ def sample_quiz_questions():
             "correct_answer": "A",
             "explanation": f"Explanation {i}"
         }
-        for i in range(1, 11)
+        for i in range(1, 6)  # Changed to 5 questions
     ]
 
 
@@ -128,7 +128,7 @@ class TestQuizGeneration:
         assert data["module_id"] == module_id
         assert data["mode"] == "untimed"
         assert data["time_limit_seconds"] is None
-        assert len(data["questions"]) == 10
+        assert len(data["questions"]) == 5  # Changed to 5
         
         # Verify quiz generation was called
         mock_generate_quiz.assert_called_once()
@@ -267,7 +267,7 @@ class TestQuizSubmission:
         mock_evaluate_quiz.return_value = mock_result
         
         # Submit quiz
-        answers = {i: "A" for i in range(1, 11)}
+        answers = {i: "A" for i in range(1, 6)}  # Changed to 5
         response = client.post(
             f"/api/quiz/submit/{module_id}",
             json={
@@ -287,7 +287,7 @@ class TestQuizSubmission:
         assert data["accuracy"] == 80.0
         assert data["time_taken_seconds"] == 300
         assert data["time_limit_exceeded"] is False
-        assert len(data["detailed_results"]) == 10
+        assert len(data["detailed_results"]) == 5  # Changed to 5
         
         # Verify evaluation and storage were called
         mock_evaluate_quiz.assert_called_once()
@@ -343,7 +343,7 @@ class TestQuizSubmission:
         mock_evaluate_quiz.return_value = mock_result
         
         # Submit quiz
-        answers = {i: "A" for i in range(1, 11)}
+        answers = {i: "A" for i in range(1, 6)}  # Changed to 5
         response = client.post(
             f"/api/quiz/submit/{module_id}",
             json={
@@ -440,7 +440,7 @@ class TestQuizHistory:
                 f"/api/quiz/submit/{module_id}",
                 json={
                     "quiz_id": quiz_id,
-                    "answers": {j: "A" for j in range(1, 11)},
+                    "answers": {j: "A" for j in range(1, 6)},  # Changed to 5
                     "time_taken_seconds": 300
                 }
             )
@@ -537,7 +537,7 @@ class TestQuizMetrics:
             f"/api/quiz/submit/{module_id}",
             json={
                 "quiz_id": quiz_id,
-                "answers": {i: "A" for i in range(1, 11)},
+                "answers": {i: "A" for i in range(1, 6)},  # Changed to 5
                 "time_taken_seconds": 250
             }
         )
@@ -642,7 +642,7 @@ class TestQuizPruning:
                 f"/api/quiz/submit/{module_id}",
                 json={
                     "quiz_id": quiz_id,
-                    "answers": {j: "A" for j in range(1, 11)},
+                    "answers": {j: "A" for j in range(1, 6)},  # Changed to 5
                     "time_taken_seconds": 300
                 }
             )

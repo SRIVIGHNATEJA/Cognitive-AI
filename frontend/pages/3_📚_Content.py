@@ -308,7 +308,8 @@ with col1:
 with col2:
     # Take Quiz button
     if st.button("📝 Take Quiz", type="primary", use_container_width=True):
-        st.info("Go to the **Quiz** page to test your knowledge.")
+        # current_module_id and current_module already set
+        st.switch_page("pages/4_🧪_Quiz.py")
 
 with col3:
     # Next module button

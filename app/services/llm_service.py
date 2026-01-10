@@ -487,7 +487,9 @@ Generate the cheat sheet now:"""
         max_retries: int = 2
     ) -> List[Dict[str, Any]]:
         """
-        Generate a quiz with exactly 10 MCQs for a module using the LLM.
+        Generate a quiz with exactly 5 MCQs for a module using the LLM.
+        
+        Optimized for small models (qwen2.5:1.5b) with reduced question count.
         
         Each question must have:
         - Exactly 4 options
@@ -496,11 +498,11 @@ Generate the cheat sheet now:"""
         
         Args:
             module_info: Dictionary with module details (topic_name, etc.)
-            content: The source educational content
+            content: The source educational content (module-scoped)
             max_retries: Maximum number of retry attempts on validation failure
             
         Returns:
-            List of 10 quiz question dictionaries
+            List of 5 quiz question dictionaries
             
         Raises:
             LLMServiceError: If generation fails or validation fails after retries
@@ -582,9 +584,11 @@ Generate the cheat sheet now:"""
         """
         Build the prompt for quiz generation with strict format requirements.
         
+        Optimized for small models with reduced question count (5 instead of 10).
+        
         Args:
             module_info: Module details
-            content: Source educational content
+            content: Source educational content (module-scoped)
             
         Returns:
             Complete prompt string
@@ -604,13 +608,13 @@ SOURCE MATERIAL:
 {truncated_content}
 
 STRICT REQUIREMENTS:
-1. Generate EXACTLY 10 multiple-choice questions
+1. Generate EXACTLY 5 multiple-choice questions
 2. Each question MUST have EXACTLY 4 options
 3. Each question MUST have ONE correct answer
 4. Each question MUST have a brief explanation (maximum 200 characters)
 5. Questions should cover the key concepts from the material
 6. Options should be plausible but clearly distinguishable
-7. Number questions from 1 to 10
+7. Number questions from 1 to 5
 
 OUTPUT FORMAT (JSON):
 {{
@@ -622,7 +626,7 @@ OUTPUT FORMAT (JSON):
       "correct_answer": "Option B",
       "explanation": "Brief explanation here (max 200 chars)"
     }},
-    ... (repeat for all 10 questions)
+    ... (repeat for all 5 questions)
   ]
 }}
 
@@ -631,16 +635,82 @@ CRITICAL RULES:
 - Ensure correct_answer matches one of the 4 options EXACTLY
 - Keep explanations under 200 characters
 - Make questions clear and unambiguous
-- Ensure all 10 questions are included
+- Ensure all 5 questions are included
 - Questions should test understanding, not just memorization
 
 Generate the quiz now:"""
         
         return prompt
     
+    def _normalize_correct_answer(self, correct_answer: str, options: List[str]) -> str:
+        """
+        Normalize the correct_answer to match one of the option strings.
+        
+        Handles common LLM output formats:
+        - Single letter labels: "A", "B", "C", "D"
+        - Prefixed labels: "Option A", "Option B", etc.
+        - Formatted labels: "A.", "B)", "A:", etc.
+        
+        Args:
+            correct_answer: The correct answer string from LLM
+            options: List of 4 option strings
+            
+        Returns:
+            Normalized correct answer that matches one of the options
+            
+        Raises:
+            ValueError: If normalization fails to find a match
+        """
+        # If already matches exactly, return as-is
+        if correct_answer in options:
+            return correct_answer
+        
+        # Strip whitespace
+        normalized = correct_answer.strip()
+        
+        # Try direct match after stripping
+        if normalized in options:
+            return normalized
+        
+        # Extract label if it's a single letter (A-D)
+        if len(normalized) == 1 and normalized.upper() in ['A', 'B', 'C', 'D']:
+            label_index = ord(normalized.upper()) - ord('A')
+            if 0 <= label_index < len(options):
+                logger.info(f"Normalized answer '{correct_answer}' to option {label_index}: '{options[label_index]}'")
+                return options[label_index]
+        
+        # Try to extract label from common formats
+        # Formats: "A.", "B)", "A:", "Option A", "Option B", "A. text", "B) text", etc.
+        import re
+        
+        # Pattern to match label at start: optional "Option" + optional space + letter + optional punctuation/space/end
+        # Made the trailing character class optional with ?
+        pattern = r'^(?:Option\s*)?([A-D])(?:[\.\)\:\s]|$)'
+        match = re.match(pattern, normalized, re.IGNORECASE)
+        
+        if match:
+            label = match.group(1).upper()
+            label_index = ord(label) - ord('A')
+            if 0 <= label_index < len(options):
+                logger.info(f"Normalized answer '{correct_answer}' to option {label_index}: '{options[label_index]}'")
+                return options[label_index]
+        
+        # Try case-insensitive match with options
+        normalized_lower = normalized.lower()
+        for option in options:
+            if option.lower() == normalized_lower:
+                logger.info(f"Normalized answer '{correct_answer}' to '{option}' (case-insensitive match)")
+                return option
+        
+        # If we get here, normalization failed
+        raise ValueError(f"Could not normalize correct_answer '{correct_answer}' to any of the options")
+    
     def _validate_quiz_structure(self, quiz_data: Dict[str, Any]) -> tuple[bool, str]:
         """
         Validate that the quiz data meets all structural requirements.
+        
+        Enforces exactly 5 questions (optimized for small models).
+        Includes normalization of correct_answer to handle common LLM output formats.
         
         Args:
             quiz_data: The quiz data to validate
@@ -658,9 +728,9 @@ Generate the quiz now:"""
         if not isinstance(questions, list):
             return False, "'questions' must be a list"
         
-        # Check exactly 10 questions
-        if len(questions) != 10:
-            return False, f"Expected exactly 10 questions, got {len(questions)}"
+        # Check exactly 5 questions (optimized for performance)
+        if len(questions) != 5:
+            return False, f"Expected exactly 5 questions, got {len(questions)}"
         
         # Validate each question
         for i, question in enumerate(questions, 1):
@@ -688,10 +758,14 @@ Generate the quiz now:"""
                 if not isinstance(option, str) or not option.strip():
                     return False, f"Question {i}, option {j} is invalid"
             
-            # Check correct answer is one of the options
+            # Normalize and validate correct answer
             correct_answer = question["correct_answer"]
-            if correct_answer not in options:
-                return False, f"Question {i} correct_answer '{correct_answer}' not in options"
+            try:
+                normalized_answer = self._normalize_correct_answer(correct_answer, options)
+                # Update the question with normalized answer
+                question["correct_answer"] = normalized_answer
+            except ValueError as e:
+                return False, f"Question {i} validation failed: {str(e)}"
             
             # Check explanation length
             explanation = question["explanation"]
