@@ -855,47 +855,57 @@ Generate the quiz now:"""
         """
         topic_name = module_info.get('topic_name', 'Unknown Topic')
         
-        # Truncate content if too long
+        # Truncate content if too long (optimized for qwen2.5:1.5b on CPU)
         truncated_content = content[:3000] if len(content) > 3000 else content
         
-        prompt = f"""You are an expert educator creating multiple-choice quiz questions.
+        # OPTIMIZATION: Short, direct prompt for faster generation on small models
+        prompt = f"""Create 5 simple quiz questions about: {topic_name}
 
-Generate quiz questions for the following topic:
-
-TOPIC: {topic_name}
-
-SOURCE MATERIAL:
+SOURCE:
 {truncated_content}
 
-STRICT REQUIREMENTS:
-1. Generate EXACTLY 5 multiple-choice questions
-2. Each question MUST have EXACTLY 4 plausible options
-3. DO NOT include correct answers or explanations
-4. Questions should cover the key concepts from the material
-5. Options should be plausible but clearly distinguishable
-6. Number questions from 1 to 5
+RULES:
+1. EXACTLY 5 questions
+2. Each question: max 20 words, direct and clear
+3. Each option: max 10 words
+4. EXACTLY 4 options per question (A, B, C, D)
+5. NO scenarios, NO "best/most appropriate" phrasing
+6. Test ONE concept per question
+7. Stay strictly within the source material
 
-OUTPUT FORMAT (JSON):
+QUESTION STYLE (GOOD):
+"What is DevOps?"
+"Which tool automates deployment?"
+"What does CI/CD stand for?"
+
+QUESTION STYLE (BAD - TOO LONG):
+"In a scenario where a team needs to deploy frequently, which methodology would be most appropriate?"
+
+OUTPUT (JSON only, no extra text):
 {{
   "questions": [
     {{
       "question_number": 1,
-      "question_text": "What is...?",
+      "question_text": "Short direct question?",
+      "options": ["Short option A", "Short option B", "Short option C", "Short option D"]
+    }},
+    {{
+      "question_number": 2,
+      "question_text": "Another short question?",
       "options": ["Option A", "Option B", "Option C", "Option D"]
     }},
-    ... (repeat for all 5 questions)
+    ... (3 more questions)
   ]
 }}
 
-CRITICAL RULES:
-- Output ONLY valid JSON, no additional text
-- DO NOT include "correct_answer" or "explanation" fields
-- Make questions clear and unambiguous
-- Ensure all 5 questions are included
-- Questions should test understanding, not just memorization
-- All 4 options should be plausible
+CRITICAL:
+- Output ONLY valid JSON
+- NO "correct_answer" or "explanation" fields
+- Questions must be under 20 words
+- Options must be under 10 words each
+- Number questions 1 to 5
 
-Generate the quiz questions now:"""
+Generate now:"""
         
         return prompt
     
@@ -920,62 +930,60 @@ Generate the quiz questions now:"""
         """
         topic_name = module_info.get('topic_name', 'Unknown Topic')
         
-        # Truncate content if too long
+        # Truncate content if too long (optimized for qwen2.5:1.5b on CPU)
         truncated_content = content[:3000] if len(content) > 3000 else content
         
-        # Format questions for the prompt
+        # Format questions for the prompt (compact format)
         questions_text = ""
         for q in questions:
-            questions_text += f"\nQuestion {q['question_number']}: {q['question_text']}\n"
-            for i, option in enumerate(q['options'], 1):
-                questions_text += f"  {chr(64+i)}. {option}\n"
+            questions_text += f"\n{q['question_number']}. {q['question_text']}\n"
+            for i, option in enumerate(q['options']):
+                questions_text += f"   {chr(65+i)}) {option}\n"
         
-        prompt = f"""You are an expert educator providing correct answers and explanations for quiz questions.
+        # OPTIMIZATION: Ultra-concise prompt for faster generation on small models
+        prompt = f"""Provide correct answers for these quiz questions about: {topic_name}
 
-TOPIC: {topic_name}
-
-SOURCE MATERIAL:
-{truncated_content}
-
-QUIZ QUESTIONS:
+QUESTIONS:
 {questions_text}
 
 TASK:
 For each question, provide:
-1. The correct answer (must match one of the options EXACTLY)
-2. A VERY brief explanation (MAXIMUM 120 characters - count every character!)
+1. Correct answer (MUST match option text EXACTLY - copy it word-for-word)
+2. One-sentence explanation (MAX 80 characters)
 
-EXPLANATION EXAMPLES (all under 120 chars):
-- "DevOps combines development and operations for faster, automated deployments." (79 chars) ✓
-- "Microservices split apps into small, independent services for better scalability." (83 chars) ✓
-- "CI/CD automates testing and deployment to speed up software delivery." (71 chars) ✓
+EXPLANATION STYLE (GOOD - under 80 chars):
+"DevOps combines dev and ops for faster deployment." (52 chars) ✓
+"Microservices are small independent services." (46 chars) ✓
+"CI/CD automates testing and deployment." (40 chars) ✓
 
-BAD EXAMPLES (too long):
-- "DevOps is a set of practices that combines software development and IT operations to shorten the development lifecycle and provide continuous delivery." (155 chars) ✗
+EXPLANATION STYLE (BAD - too long):
+"DevOps is a methodology that combines software development and IT operations." (78 chars but still too wordy) ✗
 
-OUTPUT FORMAT (JSON):
+OUTPUT (JSON only):
 {{
   "answers": [
     {{
       "question_number": 1,
-      "correct_answer": "Option B",
-      "explanation": "Very brief explanation (max 120 chars)"
+      "correct_answer": "Exact option text here",
+      "explanation": "One sentence max 80 chars"
     }},
-    ... (repeat for all 5 questions)
+    {{
+      "question_number": 2,
+      "correct_answer": "Exact option text here",
+      "explanation": "One sentence max 80 chars"
+    }},
+    ... (3 more)
   ]
 }}
 
-CRITICAL RULES:
-- Output ONLY valid JSON, no additional text
-- Ensure correct_answer matches one of the options EXACTLY
-- Keep explanations under 120 characters - BE EXTREMELY CONCISE
-- Remove all unnecessary words - every character counts
-- Use short sentences - avoid complex phrases
-- Provide answers for all 5 questions
-- Base answers on the source material
-- IMPORTANT: Explanations over 120 characters will be REJECTED
+CRITICAL:
+- Output ONLY valid JSON, no markdown, no extra text
+- correct_answer MUST be EXACT copy of one option (A, B, C, or D)
+- Do NOT use labels like "A)" or "Option A" - copy the actual option text
+- Explanation: plain string, max 80 chars, one sentence, no examples
+- Provide all 5 answers
 
-Generate the answers now:"""
+Generate now:"""
         
         return prompt
     
@@ -1233,7 +1241,8 @@ Generate the answers now:"""
             except ValueError as e:
                 return False, f"Answer {i} validation failed: {str(e)}"
             
-            # Check explanation length (ask for 120, validate at 180 for buffer)
+            # Check explanation length (ask for 80, validate at 180 for large buffer)
+            # Validation is lenient to avoid retries, but prompt enforces brevity
             explanation = answer["explanation"]
             if not isinstance(explanation, str):
                 return False, f"Answer {i} explanation must be a string, got {type(explanation).__name__}"
