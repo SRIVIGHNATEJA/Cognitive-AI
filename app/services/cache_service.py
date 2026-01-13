@@ -736,14 +736,15 @@ class CacheService:
             logger.error(f"Failed to retrieve evaluation {evaluation_id}: {str(e)}")
             return None
     
-    def get_quiz_evaluation_by_quiz_id(self, quiz_id: str) -> Optional[Dict[str, Any]]:
+    def get_quiz_evaluation_by_quiz_id(self, quiz_id: str, attempt_number: int = 1) -> Optional[Dict[str, Any]]:
         """
-        Retrieve quiz evaluation by quiz_id.
+        Retrieve quiz evaluation by quiz_id and attempt_number.
         
-        Searches through all evaluation files to find one matching the quiz_id.
+        Searches through all evaluation files to find one matching the quiz_id and attempt.
         
         Args:
             quiz_id: Quiz identifier
+            attempt_number: Attempt number (default: 1 for backward compatibility)
             
         Returns:
             Evaluation data if found, None otherwise
@@ -760,18 +761,123 @@ class CacheService:
                     json_data = eval_file.read_text(encoding='utf-8')
                     data = self._deserialize_data(json_data)
                     
-                    if data.get("quiz_id") == quiz_id:
-                        logger.info(f"Found evaluation for quiz {quiz_id}")
+                    # Match both quiz_id and attempt_number
+                    # Default to attempt 1 for backward compatibility with old evaluations
+                    eval_attempt = data.get("attempt_number", 1)
+                    
+                    if data.get("quiz_id") == quiz_id and eval_attempt == attempt_number:
+                        logger.info(f"Found evaluation for quiz {quiz_id}, attempt {attempt_number}")
                         return data
                 except Exception as e:
                     logger.warning(f"Failed to read evaluation file {eval_file}: {str(e)}")
                     continue
             
-            logger.debug(f"No evaluation found for quiz {quiz_id}")
+            logger.debug(f"No evaluation found for quiz {quiz_id}, attempt {attempt_number}")
             return None
             
         except Exception as e:
-            logger.error(f"Failed to search for evaluation by quiz_id {quiz_id}: {str(e)}")
+            logger.error(f"Failed to search for evaluation by quiz_id {quiz_id}, attempt {attempt_number}: {str(e)}")
+            return None
+    
+    def get_latest_attempt_number(self, quiz_id: str) -> int:
+        """
+        Get the latest attempt number for a quiz.
+        
+        Searches through all submissions to find the highest attempt number.
+        
+        Args:
+            quiz_id: Quiz identifier
+            
+        Returns:
+            Latest attempt number (0 if no attempts found)
+        """
+        try:
+            quizzes_dir = self.cache_dir / 'quizzes'
+            
+            if not quizzes_dir.exists():
+                return 0
+            
+            max_attempt = 0
+            
+            # Search through all submission files
+            for sub_file in quizzes_dir.glob('submission_*.json'):
+                try:
+                    json_data = sub_file.read_text(encoding='utf-8')
+                    data = self._deserialize_data(json_data)
+                    
+                    if data.get("quiz_id") == quiz_id:
+                        # Default to attempt 1 for backward compatibility
+                        attempt = data.get("attempt_number", 1)
+                        max_attempt = max(max_attempt, attempt)
+                except Exception as e:
+                    logger.warning(f"Failed to read submission file {sub_file}: {str(e)}")
+                    continue
+            
+            logger.debug(f"Latest attempt for quiz {quiz_id}: {max_attempt}")
+            return max_attempt
+            
+        except Exception as e:
+            logger.error(f"Failed to get latest attempt for quiz {quiz_id}: {str(e)}")
+            return 0
+    
+    def cache_quiz_answers(self, quiz_id: str, answers_data: list) -> None:
+        """
+        Cache quiz correct answers and explanations (OPTIMIZATION for retries).
+        
+        Answers are cached after first evaluation and reused for all subsequent attempts.
+        This avoids regenerating answers with LLM on every retry (~45s saved per retry).
+        
+        Args:
+            quiz_id: Quiz identifier
+            answers_data: List of answer dictionaries with question_number, correct_answer, explanation
+        """
+        try:
+            cache_file = self.cache_dir / 'quizzes' / f'answers_{quiz_id}.json'
+            
+            answers_cache = {
+                "quiz_id": quiz_id,
+                "answers": answers_data,
+                "cached_at": datetime.now().isoformat()
+            }
+            
+            json_data = self._serialize_data(answers_cache)
+            cache_file.write_text(json_data, encoding='utf-8')
+            
+            logger.info(f"Cached answers for quiz {quiz_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to cache answers for {quiz_id}: {str(e)}")
+            raise
+    
+    def get_quiz_answers(self, quiz_id: str) -> Optional[list]:
+        """
+        Retrieve cached quiz answers (OPTIMIZATION for retries).
+        
+        Returns cached answers from first evaluation, avoiding LLM regeneration.
+        
+        Args:
+            quiz_id: Quiz identifier
+            
+        Returns:
+            List of answer dictionaries if found, None otherwise
+        """
+        try:
+            cache_file = self.cache_dir / 'quizzes' / f'answers_{quiz_id}.json'
+            
+            if not cache_file.exists():
+                logger.debug(f"No cached answers found for quiz {quiz_id}")
+                return None
+            
+            json_data = cache_file.read_text(encoding='utf-8')
+            answers_cache = self._deserialize_data(json_data)
+            
+            answers_data = answers_cache.get("answers", [])
+            logger.info(f"Retrieved cached answers for quiz {quiz_id}")
+            
+            return answers_data
+            
+        except Exception as e:
+            logger.error(f"Failed to retrieve cached answers for {quiz_id}: {str(e)}")
             return None
 
 

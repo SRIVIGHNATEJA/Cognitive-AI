@@ -103,6 +103,7 @@ if selected_module_id != st.session_state.get('current_module_id'):
     st.session_state.quiz_start_time = None
     st.session_state.quiz_submitted = False
     st.session_state.quiz_evaluated = False
+    st.session_state.quiz_attempt_number = 1
 
 # Get current module details
 current_module = st.session_state.get('current_module', {})
@@ -153,6 +154,9 @@ if 'quiz_submitted' not in st.session_state:
 if 'quiz_evaluated' not in st.session_state:
     st.session_state.quiz_evaluated = False
 
+if 'quiz_attempt_number' not in st.session_state:
+    st.session_state.quiz_attempt_number = 1
+
 # Check if quiz exists for this module
 cached_quiz = st.session_state.quiz_cache.get(selected_module_id)
 
@@ -167,6 +171,18 @@ if quiz_evaluated and cached_quiz and cached_quiz.get('evaluation'):
     st.subheader("Quiz Results")
     
     evaluation = cached_quiz['evaluation']
+    attempt_num = evaluation.get('attempt_number', 1)
+    quiz_id = cached_quiz['quiz']['quiz_id']
+    
+    # Display quiz info and attempt number
+    col_info1, col_info2 = st.columns(2)
+    with col_info1:
+        st.caption(f"**Quiz ID:** `{quiz_id}`")
+    with col_info2:
+        if attempt_num > 1:
+            st.caption(f"**Attempt:** {attempt_num}")
+        else:
+            st.caption(f"**Attempt:** {attempt_num} (First attempt)")
     
     # Display score
     col1, col2, col3, col4 = st.columns(4)
@@ -236,13 +252,79 @@ if quiz_evaluated and cached_quiz and cached_quiz.get('evaluation'):
     # Navigation buttons
     st.subheader("Actions")
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         if st.button("📚 Back to Content", use_container_width=True):
             st.switch_page("pages/3_📚_Content.py")
     
     with col2:
+        # Retry button - same quiz, new attempt
+        if st.button("🔄 Retry Quiz", type="secondary", use_container_width=True, help="Retry with same questions (new attempt)"):
+            try:
+                with st.spinner("Preparing quiz retry..."):
+                    retry_result = quiz_service.retry_quiz(quiz_id=cached_quiz['quiz']['quiz_id'])
+                
+                # Update cache with new attempt number
+                new_attempt = retry_result.get('attempt_number', 1)
+                st.session_state.quiz_cache[selected_module_id] = {
+                    'quiz': retry_result,
+                    'submission': None,
+                    'evaluation': None
+                }
+                
+                # Reset quiz state for new attempt
+                st.session_state.quiz_answers = {}
+                st.session_state.quiz_start_time = None
+                st.session_state.quiz_submitted = False
+                st.session_state.quiz_evaluated = False
+                st.session_state.quiz_attempt_number = new_attempt
+                
+                show_success(f"Quiz retry initialized! Starting attempt {new_attempt} with same questions.")
+                st.rerun()
+                
+            except Exception as e:
+                handle_api_error(e, "Quiz retry")
+    
+    with col3:
+        # New Quiz button - fresh quiz with new questions
+        if st.button("✨ New Quiz", type="primary", use_container_width=True, help="Generate new quiz with different questions"):
+            try:
+                # Determine quiz mode based on roadmap mode
+                quiz_mode = mode
+                time_limit = None
+                
+                if quiz_mode == 'timed':
+                    time_limit = 600  # 10 minutes
+                
+                with st.spinner("Generating new quiz..."):
+                    result = quiz_service.generate_quiz(
+                        module_id=selected_module_id,
+                        mode=quiz_mode,
+                        time_limit_seconds=time_limit
+                    )
+                
+                # Cache new quiz in session
+                st.session_state.quiz_cache[selected_module_id] = {
+                    'quiz': result,
+                    'submission': None,
+                    'evaluation': None
+                }
+                
+                # Reset quiz state for new quiz
+                st.session_state.quiz_answers = {}
+                st.session_state.quiz_start_time = None
+                st.session_state.quiz_submitted = False
+                st.session_state.quiz_evaluated = False
+                st.session_state.quiz_attempt_number = 1
+                
+                show_success("New quiz generated successfully! 5 fresh questions ready.")
+                st.rerun()
+                
+            except Exception as e:
+                handle_api_error(e, "New quiz generation")
+    
+    with col4:
         # Next module button
         current_index = order - 1  # order is 1-based
         is_last = current_index == len(modules) - 1
@@ -257,6 +339,7 @@ if quiz_evaluated and cached_quiz and cached_quiz.get('evaluation'):
                 st.session_state.quiz_start_time = None
                 st.session_state.quiz_submitted = False
                 st.session_state.quiz_evaluated = False
+                st.session_state.quiz_attempt_number = 1
                 st.rerun()
 
 # If quiz is submitted but not evaluated, show evaluate button
@@ -280,8 +363,12 @@ elif quiz_submitted and cached_quiz and not quiz_evaluated:
     # Evaluate button
     if st.button("🎯 Evaluate Quiz", type="primary", use_container_width=True):
         try:
+            attempt_num = st.session_state.get('quiz_attempt_number', 1)
             with st.spinner("Evaluating your answers... This may take a moment."):
-                evaluation = quiz_service.evaluate_quiz(quiz_id=quiz_id)
+                evaluation = quiz_service.evaluate_quiz(
+                    quiz_id=quiz_id,
+                    attempt_number=attempt_num
+                )
             
             # Store evaluation in cache
             st.session_state.quiz_cache[selected_module_id]['evaluation'] = evaluation
@@ -304,6 +391,17 @@ elif cached_quiz and not quiz_submitted:
     questions = quiz_data.get('questions', [])
     quiz_mode = quiz_data.get('mode', 'untimed')
     time_limit = quiz_data.get('time_limit_seconds')
+    attempt_num = st.session_state.get('quiz_attempt_number', 1)
+    
+    # Display quiz info
+    col_info1, col_info2 = st.columns(2)
+    with col_info1:
+        st.caption(f"**Quiz ID:** `{quiz_id}`")
+    with col_info2:
+        if attempt_num > 1:
+            st.caption(f"**Attempt:** {attempt_num} (Retry)")
+        else:
+            st.caption(f"**Attempt:** {attempt_num} (First attempt)")
     
     # Start timer if not started
     if st.session_state.quiz_start_time is None:
@@ -363,12 +461,14 @@ elif cached_quiz and not quiz_submitted:
         
         # Submit quiz (no evaluation yet)
         try:
+            attempt_num = st.session_state.get('quiz_attempt_number', 1)
             with st.spinner("Submitting your answers..."):
                 submission = quiz_service.submit_quiz(
                     module_id=selected_module_id,
                     quiz_id=quiz_id,
                     answers=st.session_state.quiz_answers,
-                    time_taken_seconds=time_taken
+                    time_taken_seconds=time_taken,
+                    attempt_number=attempt_num
                 )
             
             # Store submission in cache
@@ -430,6 +530,7 @@ else:
                 st.session_state.quiz_start_time = None
                 st.session_state.quiz_submitted = False
                 st.session_state.quiz_evaluated = False
+                st.session_state.quiz_attempt_number = 1
                 
                 show_success("Quiz generated successfully! 5 questions ready.")
                 st.rerun()
@@ -456,7 +557,7 @@ with st.expander("ℹ️ Help"):
     **Quiz Format:**
     - 5 multiple-choice questions per module (optimized for performance)
     - 4 options per question
-    - Single attempt per module
+    - Multiple attempts supported (retry with same questions)
     - Deferred evaluation (submit first, evaluate when ready)
     
     **Quiz Modes:**
@@ -492,15 +593,33 @@ with st.expander("ℹ️ Help"):
     ### Navigation
     
     - Click "Back to Content" to review notes
+    - Click "Retry Quiz" to retake with **same questions** (new attempt, instant evaluation)
+    - Click "New Quiz" to generate **different questions** (fresh quiz, new quiz_id)
     - Click "Next Module" to proceed to next module
     - Quiz results are saved permanently
+    - Each retry is tracked as a separate attempt
+    
+    ### Retry vs New Quiz
+    
+    **Retry Quiz (🔄):**
+    - Same quiz_id, same questions
+    - New attempt_number (2, 3, 4...)
+    - Instant evaluation (uses cached answers from first attempt)
+    - Good for: Improving your score on the same questions
+    
+    **New Quiz (✨):**
+    - New quiz_id, different questions
+    - Resets to attempt_number 1
+    - First evaluation takes ~45s (generates new answers)
+    - Good for: Testing knowledge with fresh questions
     
     ### Tips
     
     - Review notes before taking quiz
     - Read questions carefully
     - All questions must be answered before submission
-    - You cannot retake a quiz once submitted
+    - You can retry a quiz multiple times (same questions)
     - Evaluation may take a few seconds (AI processing)
     - Use explanations to learn from mistakes
+    - Each retry is a new attempt with fresh answers
     """)

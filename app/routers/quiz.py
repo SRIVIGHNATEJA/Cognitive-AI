@@ -229,13 +229,21 @@ async def generate_quiz(module_id: str, request: QuizGenerateRequest = Body(...)
 
 
 @router.post("/submit/{module_id}", status_code=status.HTTP_200_OK)
-async def submit_quiz(module_id: str, request: QuizSubmitRequest = Body(...)) -> Dict[str, Any]:
+async def submit_quiz(
+    module_id: str, 
+    request: QuizSubmitRequest = Body(...),
+    attempt_number: int = 1
+) -> Dict[str, Any]:
     """
     Submit quiz answers WITHOUT evaluation (Phase 3 - Deferred Evaluation).
     
+    RETRY SUPPORT:
+    - attempt_number parameter tracks multiple attempts on same quiz
+    - Same questions reused across attempts (resource-aware design)
+    
     This endpoint:
     1. Validates that the quiz exists
-    2. Stores the submission (answers + time taken)
+    2. Stores the submission (answers + time taken + attempt_number)
     3. Returns submission confirmation
     
     Evaluation happens later when user calls /evaluate/{quiz_id}.
@@ -243,6 +251,7 @@ async def submit_quiz(module_id: str, request: QuizSubmitRequest = Body(...)) ->
     Args:
         module_id: Module identifier (from path)
         request: Quiz submission with quiz_id, answers, and time_taken
+        attempt_number: Attempt number (default: 1 for backward compatibility)
         
     Returns:
         Dictionary with submission confirmation
@@ -253,7 +262,7 @@ async def submit_quiz(module_id: str, request: QuizSubmitRequest = Body(...)) ->
         HTTPException 500: If submission storage fails
     """
     try:
-        logger.info(f"Quiz submission received for quiz: {request.quiz_id}")
+        logger.info(f"Quiz submission received for quiz: {request.quiz_id}, attempt {attempt_number}")
         
         # Validate that quiz exists
         quiz_history = cache_service.get_quiz_history(module_id)
@@ -276,17 +285,19 @@ async def submit_quiz(module_id: str, request: QuizSubmitRequest = Body(...)) ->
             quiz_id=request.quiz_id,
             module_id=module_id,
             user_answers=request.answers,
-            time_taken_seconds=request.time_taken_seconds
+            time_taken_seconds=request.time_taken_seconds,
+            attempt_number=attempt_number
         )
         
-        logger.info(f"Quiz submission stored: {submission_id}")
+        logger.info(f"Quiz submission stored: {submission_id} (attempt {attempt_number})")
         
         return {
             "success": True,
             "message": "Quiz submitted successfully",
             "submission_id": submission_id,
             "quiz_id": request.quiz_id,
-            "module_id": module_id
+            "module_id": module_id,
+            "attempt_number": attempt_number
         }
         
     except HTTPException:
@@ -309,12 +320,16 @@ async def submit_quiz(module_id: str, request: QuizSubmitRequest = Body(...)) ->
 
 
 @router.post("/evaluate/{quiz_id}", status_code=status.HTTP_200_OK)
-async def evaluate_quiz(quiz_id: str) -> Dict[str, Any]:
+async def evaluate_quiz(quiz_id: str, attempt_number: int = 1) -> Dict[str, Any]:
     """
     Evaluate a submitted quiz on-demand (Phase 3 - Deferred Evaluation).
     
+    RETRY SUPPORT:
+    - attempt_number parameter specifies which attempt to evaluate
+    - Each attempt has its own evaluation (cached separately)
+    
     This endpoint:
-    1. Retrieves quiz questions and submission
+    1. Retrieves quiz questions and submission (by quiz_id and attempt_number)
     2. Checks if legacy quiz (has correct_answer) → use embedded answers
     3. If new quiz → generates answers with LLM
     4. Computes score, accuracy, per-question results
@@ -323,6 +338,7 @@ async def evaluate_quiz(quiz_id: str) -> Dict[str, Any]:
     
     Args:
         quiz_id: Quiz identifier (from path)
+        attempt_number: Attempt number (default: 1 for backward compatibility)
         
     Returns:
         Dictionary with evaluation results
@@ -333,12 +349,12 @@ async def evaluate_quiz(quiz_id: str) -> Dict[str, Any]:
         HTTPException 500: If evaluation fails
     """
     try:
-        logger.info(f"Quiz evaluation requested for quiz: {quiz_id}")
+        logger.info(f"Quiz evaluation requested for quiz: {quiz_id}, attempt {attempt_number}")
         
-        # Check if evaluation already exists
-        existing_evaluation = quiz_service.get_quiz_evaluation(quiz_id)
+        # Check if evaluation already exists for this attempt
+        existing_evaluation = quiz_service.get_quiz_evaluation(quiz_id, attempt_number)
         if existing_evaluation:
-            logger.info(f"Returning cached evaluation for quiz {quiz_id}")
+            logger.info(f"Returning cached evaluation for quiz {quiz_id}, attempt {attempt_number}")
             return {
                 "success": True,
                 "cached": True,
@@ -376,10 +392,11 @@ async def evaluate_quiz(quiz_id: str) -> Dict[str, Any]:
         evaluation = quiz_service.evaluate_quiz_submission(
             quiz_id=quiz_id,
             module_id=module_id,
-            content=content
+            content=content,
+            attempt_number=attempt_number
         )
         
-        logger.info(f"Quiz evaluation complete for quiz {quiz_id}")
+        logger.info(f"Quiz evaluation complete for quiz {quiz_id}, attempt {attempt_number}")
         
         return {
             "success": True,
@@ -414,15 +431,19 @@ async def evaluate_quiz(quiz_id: str) -> Dict[str, Any]:
 
 
 @router.get("/evaluation/{quiz_id}", status_code=status.HTTP_200_OK)
-async def get_quiz_evaluation(quiz_id: str) -> Dict[str, Any]:
+async def get_quiz_evaluation(quiz_id: str, attempt_number: int = 1) -> Dict[str, Any]:
     """
     Retrieve cached quiz evaluation (Phase 3 - Deferred Evaluation).
+    
+    RETRY SUPPORT:
+    - attempt_number parameter specifies which attempt's evaluation to retrieve
     
     This endpoint retrieves a previously computed evaluation.
     If no evaluation exists, returns 404.
     
     Args:
         quiz_id: Quiz identifier (from path)
+        attempt_number: Attempt number (default: 1 for backward compatibility)
         
     Returns:
         Dictionary with evaluation results
@@ -431,17 +452,17 @@ async def get_quiz_evaluation(quiz_id: str) -> Dict[str, Any]:
         HTTPException 404: If evaluation not found
     """
     try:
-        logger.info(f"Retrieving evaluation for quiz: {quiz_id}")
+        logger.info(f"Retrieving evaluation for quiz: {quiz_id}, attempt {attempt_number}")
         
-        evaluation = quiz_service.get_quiz_evaluation(quiz_id)
+        evaluation = quiz_service.get_quiz_evaluation(quiz_id, attempt_number)
         
         if not evaluation:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No evaluation found for quiz '{quiz_id}'. Please evaluate the quiz first."
+                detail=f"No evaluation found for quiz '{quiz_id}', attempt {attempt_number}. Please evaluate the quiz first."
             )
         
-        logger.info(f"Retrieved evaluation for quiz {quiz_id}")
+        logger.info(f"Retrieved evaluation for quiz {quiz_id}, attempt {attempt_number}")
         
         return {
             "success": True,
@@ -455,6 +476,88 @@ async def get_quiz_evaluation(quiz_id: str) -> Dict[str, Any]:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while retrieving the evaluation"
+        )
+
+
+@router.post("/retry/{quiz_id}", status_code=status.HTTP_200_OK)
+async def retry_quiz(quiz_id: str) -> Dict[str, Any]:
+    """
+    Retry a quiz with a new attempt (Phase 4 - Retry Flow).
+    
+    RESOURCE-AWARE DESIGN:
+    - Same questions reused across attempts (no regeneration)
+    - Increments attempt_number for new submission/evaluation
+    - Returns quiz with new attempt_number
+    
+    This endpoint:
+    1. Validates that the quiz exists
+    2. Gets latest attempt number
+    3. Increments attempt_number
+    4. Returns quiz with new attempt_number (questions unchanged)
+    
+    Args:
+        quiz_id: Quiz identifier (from path)
+        
+    Returns:
+        Dictionary with quiz data and new attempt_number
+        
+    Raises:
+        HTTPException 404: If quiz not found
+        HTTPException 500: If retry fails
+    """
+    try:
+        logger.info(f"Quiz retry requested for quiz: {quiz_id}")
+        
+        # Get module_id from quiz history (search all modules)
+        module_id = None
+        quiz_data = None
+        roadmap_data = cache_service.get_cached_roadmap()
+        
+        if roadmap_data:
+            for module in roadmap_data.get("modules", []):
+                mod_id = module.get("module_id")
+                quiz_history = cache_service.get_quiz_history(mod_id)
+                if quiz_history:
+                    for quiz in quiz_history:
+                        if quiz.get("quiz_id") == quiz_id:
+                            module_id = mod_id
+                            quiz_data = quiz
+                            break
+                if module_id:
+                    break
+        
+        if not module_id or not quiz_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Quiz '{quiz_id}' not found"
+            )
+        
+        # Get latest attempt number
+        latest_attempt = cache_service.get_latest_attempt_number(quiz_id)
+        new_attempt = latest_attempt + 1
+        
+        logger.info(f"Quiz retry: quiz {quiz_id}, new attempt {new_attempt}")
+        
+        # Return quiz with new attempt number (questions unchanged)
+        return {
+            "success": True,
+            "message": f"Quiz retry initialized (attempt {new_attempt})",
+            "quiz_id": quiz_data.get("quiz_id"),
+            "module_id": module_id,
+            "questions": quiz_data.get("questions", []),
+            "mode": quiz_data.get("mode"),
+            "time_limit_seconds": quiz_data.get("time_limit_seconds"),
+            "attempt_number": new_attempt,
+            "created_at": quiz_data.get("created_at")
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrying quiz: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while retrying the quiz"
         )
 
 

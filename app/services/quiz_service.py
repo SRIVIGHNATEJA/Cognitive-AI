@@ -177,14 +177,20 @@ class QuizService:
         quiz_id: str,
         module_id: str,
         user_answers: Dict[int, str],
-        time_taken_seconds: int
+        time_taken_seconds: int,
+        attempt_number: int = 1
     ) -> str:
         """
         Store quiz submission WITHOUT evaluation (Phase 3 - Deferred Evaluation).
         
+        RETRY SUPPORT:
+        - attempt_number tracks multiple attempts on same quiz
+        - Same questions reused across attempts (resource-aware design)
+        - Each attempt has its own submission and evaluation
+        
         This method:
         1. Generates a unique submission ID
-        2. Creates QuizSubmission object
+        2. Creates QuizSubmission object with attempt_number
         3. Stores submission in cache
         4. Returns submission ID
         
@@ -195,6 +201,7 @@ class QuizService:
             module_id: Module identifier
             user_answers: Map of question_number to selected_option
             time_taken_seconds: Time taken to complete quiz
+            attempt_number: Attempt number (default: 1 for backward compatibility)
             
         Returns:
             Submission ID
@@ -202,22 +209,23 @@ class QuizService:
         Raises:
             ValueError: If submission data is invalid
         """
-        logger.info(f"Storing quiz submission for quiz '{quiz_id}'")
+        logger.info(f"Storing quiz submission for quiz '{quiz_id}', attempt {attempt_number}")
         
         # Validate inputs
         if not user_answers:
             raise ValueError("No answers provided")
         
-        # Generate submission ID
+        # Generate submission ID (include attempt number for uniqueness)
         from app.models import QuizSubmission
         timestamp = datetime.now()
-        submission_id = f"sub_{hashlib.sha256(f'{quiz_id}_{timestamp.isoformat()}'.encode()).hexdigest()[:12]}"
+        submission_id = f"sub_{hashlib.sha256(f'{quiz_id}_{attempt_number}_{timestamp.isoformat()}'.encode()).hexdigest()[:12]}"
         
         # Create submission object
         submission = QuizSubmission(
             submission_id=submission_id,
             quiz_id=quiz_id,
             module_id=module_id,
+            attempt_number=attempt_number,
             user_answers=user_answers,
             time_taken_seconds=time_taken_seconds,
             submitted_at=timestamp
@@ -226,31 +234,38 @@ class QuizService:
         # Store in cache
         self.cache_service.cache_quiz_submission(submission.model_dump())
         
-        logger.info(f"Quiz submission stored: {submission_id}")
+        logger.info(f"Quiz submission stored: {submission_id} (attempt {attempt_number})")
         return submission_id
     
     def evaluate_quiz_submission(
         self,
         quiz_id: str,
         module_id: str,
-        content: str
+        content: str,
+        attempt_number: int = 1
     ) -> Dict[str, Any]:
         """
         Evaluate a quiz submission on-demand (Phase 3 - Deferred Evaluation).
         
+        RETRY SUPPORT:
+        - attempt_number specifies which attempt to evaluate
+        - Each attempt has its own evaluation (cached separately)
+        - Same questions reused, but answers can differ per attempt
+        
         This method:
         1. Retrieves quiz questions from cache
-        2. Retrieves submission from cache (by quiz_id)
+        2. Retrieves submission from cache (by quiz_id and attempt_number)
         3. Checks if legacy quiz (has correct_answer) → use embedded answers
         4. If new quiz → call generate_quiz_answers_llm()
         5. Computes score, accuracy, per-question results
-        6. Creates and stores QuizEvaluation
+        6. Creates and stores QuizEvaluation with attempt_number
         7. Returns evaluation
         
         Args:
             quiz_id: Quiz identifier
             module_id: Module identifier
             content: Source educational content for LLM evaluation
+            attempt_number: Attempt number (default: 1 for backward compatibility)
             
         Returns:
             Evaluation dictionary with score, accuracy, and detailed results
@@ -259,7 +274,7 @@ class QuizService:
             ValueError: If quiz or submission not found
             RuntimeError: If LLM service fails
         """
-        logger.info(f"Evaluating quiz submission for quiz '{quiz_id}'")
+        logger.info(f"Evaluating quiz submission for quiz '{quiz_id}', attempt {attempt_number}")
         
         # Retrieve quiz from history
         quiz_history = self.cache_service.get_quiz_history(module_id)
@@ -276,22 +291,24 @@ class QuizService:
         if not quiz_data:
             raise ValueError(f"Quiz '{quiz_id}' not found in history")
         
-        # Retrieve submission by quiz_id
-        # Search through all submissions to find one matching this quiz_id
+        # Retrieve submission by quiz_id and attempt_number
+        # Search through all submissions to find one matching this quiz_id and attempt
         submission_data = None
         quizzes_dir = self.cache_service.cache_dir / 'quizzes'
         for sub_file in quizzes_dir.glob('submission_*.json'):
             try:
                 json_data = sub_file.read_text(encoding='utf-8')
                 data = self.cache_service._deserialize_data(json_data)
-                if data.get("quiz_id") == quiz_id:
+                # Default to attempt 1 for backward compatibility
+                sub_attempt = data.get("attempt_number", 1)
+                if data.get("quiz_id") == quiz_id and sub_attempt == attempt_number:
                     submission_data = data
                     break
             except Exception:
                 continue
         
         if not submission_data:
-            raise ValueError(f"No submission found for quiz '{quiz_id}'")
+            raise ValueError(f"No submission found for quiz '{quiz_id}', attempt {attempt_number}")
         
         # Check if this is a legacy quiz (has correct_answer in questions)
         questions_data = quiz_data.get("questions", [])
@@ -309,33 +326,46 @@ class QuizService:
                 for q in questions_data
             ]
         else:
-            # New quiz - generate answers with LLM
-            logger.info(f"Quiz '{quiz_id}' is new - generating answers with LLM")
+            # New quiz - check if answers already cached from previous attempt
+            cached_answers = self.cache_service.get_quiz_answers(quiz_id)
             
-            # Get module info from roadmap
-            roadmap_data = self.cache_service.get_cached_roadmap()
-            if not roadmap_data:
-                raise ValueError("No roadmap found")
-            
-            module_info = None
-            for mod in roadmap_data.get("modules", []):
-                if mod.get("module_id") == module_id:
-                    module_info = mod
-                    break
-            
-            if not module_info:
-                raise ValueError(f"Module '{module_id}' not found in roadmap")
-            
-            # Call LLM to generate answers
-            try:
-                answers_data = self.llm_service.generate_quiz_answers_llm(
-                    module_info=module_info,
-                    questions=questions_data,
-                    content=content
-                )
-            except Exception as e:
-                logger.error(f"Failed to generate quiz answers: {str(e)}")
-                raise RuntimeError(f"LLM service failed: {str(e)}")
+            if cached_answers:
+                # Reuse cached answers from first evaluation (OPTIMIZATION)
+                logger.info(f"Quiz '{quiz_id}' - reusing cached answers from first evaluation (no LLM call)")
+                answers_data = cached_answers
+            else:
+                # First evaluation - generate answers with LLM and cache them
+                logger.info(f"Quiz '{quiz_id}' - first evaluation, generating answers with LLM")
+                
+                # Get module info from roadmap
+                roadmap_data = self.cache_service.get_cached_roadmap()
+                if not roadmap_data:
+                    raise ValueError("No roadmap found")
+                
+                module_info = None
+                for mod in roadmap_data.get("modules", []):
+                    if mod.get("module_id") == module_id:
+                        module_info = mod
+                        break
+                
+                if not module_info:
+                    raise ValueError(f"Module '{module_id}' not found in roadmap")
+                
+                # Call LLM to generate answers
+                try:
+                    answers_data = self.llm_service.generate_quiz_answers_llm(
+                        module_info=module_info,
+                        questions=questions_data,
+                        content=content
+                    )
+                    
+                    # Cache answers for future attempts (OPTIMIZATION)
+                    self.cache_service.cache_quiz_answers(quiz_id, answers_data)
+                    logger.info(f"Cached answers for quiz '{quiz_id}' for future attempts")
+                    
+                except Exception as e:
+                    logger.error(f"Failed to generate quiz answers: {str(e)}")
+                    raise RuntimeError(f"LLM service failed: {str(e)}")
         
         # Evaluate submission
         user_answers = submission_data.get("user_answers", {})
@@ -390,14 +420,15 @@ class QuizService:
             if time_limit and time_taken_seconds > time_limit:
                 time_limit_exceeded = True
         
-        # Create evaluation
+        # Create evaluation with attempt_number
         from app.models import QuizEvaluation
-        evaluation_id = f"eval_{hashlib.sha256(f'{quiz_id}_{datetime.now().isoformat()}'.encode()).hexdigest()[:12]}"
+        evaluation_id = f"eval_{hashlib.sha256(f'{quiz_id}_{attempt_number}_{datetime.now().isoformat()}'.encode()).hexdigest()[:12]}"
         
         evaluation = QuizEvaluation(
             evaluation_id=evaluation_id,
             quiz_id=quiz_id,
             module_id=module_id,
+            attempt_number=attempt_number,
             score=score,
             accuracy=accuracy,
             correct_answers_count=correct_count,
@@ -415,24 +446,29 @@ class QuizService:
         
         return evaluation.model_dump(mode='json')
     
-    def get_quiz_evaluation(self, quiz_id: str) -> Optional[Dict[str, Any]]:
+    def get_quiz_evaluation(self, quiz_id: str, attempt_number: int = 1) -> Optional[Dict[str, Any]]:
         """
         Retrieve cached quiz evaluation.
         
+        RETRY SUPPORT:
+        - attempt_number specifies which attempt's evaluation to retrieve
+        - Each attempt has its own cached evaluation
+        
         Args:
             quiz_id: Quiz identifier
+            attempt_number: Attempt number (default: 1 for backward compatibility)
             
         Returns:
             Evaluation dictionary if found, None otherwise
         """
-        logger.info(f"Retrieving evaluation for quiz '{quiz_id}'")
+        logger.info(f"Retrieving evaluation for quiz '{quiz_id}', attempt {attempt_number}")
         
-        evaluation = self.cache_service.get_quiz_evaluation_by_quiz_id(quiz_id)
+        evaluation = self.cache_service.get_quiz_evaluation_by_quiz_id(quiz_id, attempt_number)
         
         if evaluation:
-            logger.info(f"Found evaluation for quiz '{quiz_id}'")
+            logger.info(f"Found evaluation for quiz '{quiz_id}', attempt {attempt_number}")
         else:
-            logger.debug(f"No evaluation found for quiz '{quiz_id}'")
+            logger.debug(f"No evaluation found for quiz '{quiz_id}', attempt {attempt_number}")
         
         return evaluation
     
