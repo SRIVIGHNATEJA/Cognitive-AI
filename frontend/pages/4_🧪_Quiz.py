@@ -29,10 +29,9 @@ st.set_page_config(
 )
 
 st.title("🧪 Module Quiz")
+st.caption("Test your knowledge with quizzes for each module")
 
-st.markdown("""
-Test your knowledge with quizzes for each module in your learning roadmap.
-""")
+st.divider()
 
 # Display any session messages
 display_session_messages()
@@ -61,7 +60,7 @@ if not modules:
     st.stop()
 
 # Module selection
-st.subheader("Select Module")
+st.markdown("### Select Module")
 
 # Build module options for dropdown
 module_options = {
@@ -168,7 +167,7 @@ quiz_evaluated = st.session_state.get('quiz_evaluated', False)
 
 # If quiz is evaluated, show results
 if quiz_evaluated and cached_quiz and cached_quiz.get('evaluation'):
-    st.subheader("Quiz Results")
+    st.markdown("### 🎯 Quiz Results")
     
     evaluation = cached_quiz['evaluation']
     attempt_num = evaluation.get('attempt_number', 1)
@@ -230,7 +229,8 @@ if quiz_evaluated and cached_quiz and cached_quiz.get('evaluation'):
             
             # Only show analytics if there are multiple attempts
             if len(attempts) > 1:
-                st.subheader("📊 Progress Across Attempts")
+                st.markdown("### 📊 Progress Across Attempts")
+                st.caption("Track your improvement over multiple quiz attempts")
                 
                 # Display improvement rate
                 improvement_rate = analytics_data.get('improvement_rate')
@@ -306,7 +306,7 @@ if quiz_evaluated and cached_quiz and cached_quiz.get('evaluation'):
     # === END ANALYTICS SECTION ===
     
     # Display detailed results
-    st.subheader("Detailed Results")
+    st.markdown("### 📋 Detailed Results")
     
     question_results = evaluation.get('question_results', [])
     
@@ -341,11 +341,10 @@ if quiz_evaluated and cached_quiz and cached_quiz.get('evaluation'):
         st.divider()
     
     # Ask a Doubt section
-    st.subheader("💬 Ask a Doubt")
+    st.divider()
     
-    st.markdown("""
-    Have a question about this quiz or module? Ask here for a quick clarification.
-    """)
+    st.markdown("### 💬 Ask a Doubt")
+    st.caption("Have a question about this quiz or module? Ask here for a quick clarification.")
     
     # Initialize doubt state in session for quiz page
     if 'quiz_doubt_answer' not in st.session_state:
@@ -418,7 +417,7 @@ if quiz_evaluated and cached_quiz and cached_quiz.get('evaluation'):
     st.divider()
     
     # Navigation buttons
-    st.subheader("Actions")
+    st.markdown("### Actions")
     
     col1, col2, col3, col4 = st.columns(4)
     
@@ -512,7 +511,7 @@ if quiz_evaluated and cached_quiz and cached_quiz.get('evaluation'):
 
 # If quiz is submitted but not evaluated, show evaluate button
 elif quiz_submitted and cached_quiz and not quiz_evaluated:
-    st.subheader("Quiz Submitted")
+    st.markdown("### ✅ Quiz Submitted")
     
     submission = cached_quiz.get('submission', {})
     quiz_data = cached_quiz.get('quiz', {})
@@ -552,7 +551,7 @@ elif quiz_submitted and cached_quiz and not quiz_evaluated:
 
 # If quiz exists but not submitted, display quiz
 elif cached_quiz and not quiz_submitted:
-    st.subheader("Quiz")
+    st.markdown("### 📝 Quiz Questions")
     
     quiz_data = cached_quiz.get('quiz', {})
     quiz_id = quiz_data.get('quiz_id', '')
@@ -651,7 +650,7 @@ elif cached_quiz and not quiz_submitted:
 
 # If no quiz exists, show generate button
 else:
-    st.subheader("Generate Quiz")
+    st.markdown("### Generate Quiz")
     
     st.info("No quiz generated yet for this module.")
     

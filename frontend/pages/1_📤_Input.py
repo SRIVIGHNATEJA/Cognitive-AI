@@ -30,27 +30,27 @@ st.set_page_config(
 )
 
 st.title("📤 Input")
+st.caption("Upload your syllabus or question bank to get started")
 
-st.markdown("""
-Upload your syllabus or question bank to get started. You can either upload a file
-or paste text directly.
-""")
+st.divider()
 
 # Display any session messages
 display_session_messages()
 
 # Input method selection
+st.markdown("### Choose Input Method")
 input_method = st.radio(
-    "Choose input method:",
+    "Select how you want to provide your content:",
     ["📁 Upload File", "📝 Enter Text"],
-    horizontal=True
+    horizontal=True,
+    label_visibility="collapsed"
 )
 
 st.divider()
 
 # File Upload Section
 if input_method == "📁 Upload File":
-    st.subheader("Upload File")
+    st.markdown("### 📁 Upload File")
     
     st.info(f"""
     **Supported formats:** {', '.join(config.SUPPORTED_FORMATS)}  
@@ -107,26 +107,26 @@ if input_method == "📁 Upload File":
                         }
                         
                         # Show success
-                        show_success(f"File processed successfully! Input ID: {result.get('input_id')[:16]}...")
+                        show_success(f"✅ File processed successfully!")
                         
                         # Display processing results
                         st.divider()
-                        st.subheader("Processing Results")
+                        st.markdown("### Processing Results")
                         
                         col1, col2 = st.columns(2)
                         with col1:
                             st.metric("Detected Type", result.get('detected_type', 'Unknown').replace('_', ' ').title())
                         with col2:
-                            st.metric("Extracted Text Length", f"{result.get('extracted_text_length', 0):,} chars")
+                            st.metric("Text Length", f"{result.get('extracted_text_length', 0):,} chars")
                         
-                        st.info("✅ Your input has been processed. Go to the **Roadmap** page to generate your learning path!")
+                        st.info("✅ Ready to continue! Go to the **Roadmap** page to generate your learning path.")
                         
                 except Exception as e:
                     handle_api_error(e, "File upload")
 
 # Text Input Section
 else:
-    st.subheader("Enter Text")
+    st.markdown("### 📝 Enter Text")
     
     st.info("""
     Paste your syllabus or question bank content directly.  
@@ -196,19 +196,19 @@ else:
                     }
                     
                     # Show success
-                    show_success(f"Text processed successfully! Input ID: {result.get('input_id')[:16]}...")
+                    show_success(f"✅ Text processed successfully!")
                     
                     # Display processing results
                     st.divider()
-                    st.subheader("Processing Results")
+                    st.markdown("### Processing Results")
                     
                     col1, col2 = st.columns(2)
                     with col1:
                         st.metric("Detected Type", result.get('detected_type', 'Unknown').replace('_', ' ').title())
                     with col2:
-                        st.metric("Extracted Text Length", f"{result.get('extracted_text_length', 0):,} chars")
+                        st.metric("Text Length", f"{result.get('extracted_text_length', 0):,} chars")
                     
-                    st.info("✅ Your input has been processed. Go to the **Roadmap** page to generate your learning path!")
+                    st.info("✅ Ready to continue! Go to the **Roadmap** page to generate your learning path.")
                     
             except Exception as e:
                 handle_api_error(e, "Text submission")
@@ -217,7 +217,7 @@ else:
 st.divider()
 
 if st.session_state.get('current_input_id'):
-    st.subheader("Current Input")
+    st.markdown("### Current Input Status")
     
     with st.expander("📋 View Input Details", expanded=False):
         input_data = st.session_state.get('input_data', {})

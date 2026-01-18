@@ -29,10 +29,9 @@ st.set_page_config(
 )
 
 st.title("📚 Module Content")
+st.caption("View detailed notes and cheat sheets for each module")
 
-st.markdown("""
-View detailed notes and cheat sheets for each module in your learning roadmap.
-""")
+st.divider()
 
 # Display any session messages
 display_session_messages()
@@ -54,7 +53,7 @@ if not modules:
     st.stop()
 
 # Module selection
-st.subheader("Select Module")
+st.markdown("### Select Module")
 
 # Build module options for dropdown
 module_options = {
@@ -144,7 +143,7 @@ tab1, tab2 = st.tabs(["📝 Detailed Notes", "📄 Cheat Sheet"])
 
 # Notes Tab
 with tab1:
-    st.subheader("Detailed Notes")
+    st.markdown("#### 📝 Detailed Notes")
     
     # Check if notes are cached in session
     cached_notes = st.session_state.content_cache[selected_module_id].get('notes')
@@ -216,7 +215,7 @@ with tab1:
 
 # Cheat Sheet Tab
 with tab2:
-    st.subheader("Cheat Sheet")
+    st.markdown("#### 📄 Cheat Sheet")
     
     # Check if cheat sheet is cached in session
     cached_cheatsheet = st.session_state.content_cache[selected_module_id].get('cheatsheet')
@@ -289,11 +288,8 @@ with tab2:
 # Ask a Doubt section
 st.divider()
 
-st.subheader("💬 Ask a Doubt")
-
-st.markdown("""
-Have a question about this module? Ask here for a quick clarification.
-""")
+st.markdown("### 💬 Ask a Doubt")
+st.caption("Have a question about this module? Ask here for a quick clarification.")
 
 # Initialize doubt state in session
 if 'doubt_answer' not in st.session_state:
@@ -366,7 +362,7 @@ if st.session_state.doubt_answer:
 # Navigation and action buttons
 st.divider()
 
-st.subheader("Actions")
+st.markdown("### Actions")
 
 col1, col2, col3 = st.columns(3)
 

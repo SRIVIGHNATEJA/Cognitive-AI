@@ -29,11 +29,9 @@ st.set_page_config(
 )
 
 st.title("🗺️ Learning Roadmap")
+st.caption("Generate your personalized learning path")
 
-st.markdown("""
-Generate your personalized learning roadmap based on your input. Choose between
-timed or untimed learning modes.
-""")
+st.divider()
 
 # Display any session messages
 display_session_messages()
@@ -48,7 +46,7 @@ has_roadmap = st.session_state.get('roadmap') is not None
 
 # Roadmap Generation Section
 if not has_roadmap:
-    st.subheader("Generate Roadmap")
+    st.markdown("### Generate Your Roadmap")
     
     st.info(f"""
     **Current Input ID:** `{st.session_state.current_input_id[:20]}...`  
@@ -133,7 +131,7 @@ else:
         col1, col2 = st.columns([3, 1])
         
         with col1:
-            st.subheader("Your Learning Path")
+            st.markdown("### Your Learning Path")
         
         with col2:
             mode_display = mode.title()
@@ -143,7 +141,7 @@ else:
         col1, col2, col3 = st.columns([2, 1, 1])
         
         with col1:
-            st.subheader("Your Learning Path")
+            st.markdown("### Your Learning Path")
         
         with col2:
             mode_display = mode.title()
@@ -170,7 +168,7 @@ else:
     if not modules:
         show_warning("No modules found in roadmap.")
     else:
-        st.subheader(f"Modules ({len(modules)})")
+        st.markdown(f"### Modules ({len(modules)})")
         
         # Build module_id -> topic_name mapping for prerequisite display
         module_id_to_name = {
@@ -251,7 +249,7 @@ else:
     st.divider()
     
     # Roadmap actions
-    st.subheader("Roadmap Actions")
+    st.markdown("### Roadmap Actions")
     
     col1, col2 = st.columns(2)
     
