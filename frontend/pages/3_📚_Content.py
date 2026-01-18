@@ -286,6 +286,83 @@ with tab2:
         except Exception as e:
             handle_api_error(e, "Cheat sheet retrieval")
 
+# Ask a Doubt section
+st.divider()
+
+st.subheader("💬 Ask a Doubt")
+
+st.markdown("""
+Have a question about this module? Ask here for a quick clarification.
+""")
+
+# Initialize doubt state in session
+if 'doubt_answer' not in st.session_state:
+    st.session_state.doubt_answer = None
+if 'doubt_question' not in st.session_state:
+    st.session_state.doubt_question = ""
+
+# Doubt input form
+with st.form(key=f"doubt_form_{selected_module_id}", clear_on_submit=False):
+    doubt_question = st.text_area(
+        "Your question:",
+        value=st.session_state.doubt_question,
+        placeholder="e.g., What is the difference between a list and a tuple?",
+        help="Ask a specific question about this module's content",
+        max_chars=500,
+        height=100
+    )
+    
+    col_submit, col_clear = st.columns([1, 1])
+    
+    with col_submit:
+        submit_doubt = st.form_submit_button("Submit Question", type="primary", use_container_width=True)
+    
+    with col_clear:
+        clear_doubt = st.form_submit_button("Clear", use_container_width=True)
+
+# Handle clear button
+if clear_doubt:
+    st.session_state.doubt_answer = None
+    st.session_state.doubt_question = ""
+    st.rerun()
+
+# Handle submit button
+if submit_doubt:
+    if not doubt_question or len(doubt_question.strip()) < 5:
+        show_warning("Please enter a question (at least 5 characters)")
+    else:
+        try:
+            # Import doubt service
+            from services.doubt_service import doubt_service
+            
+            with st.spinner("Thinking..."):
+                result = doubt_service.ask_doubt(
+                    module_id=selected_module_id,
+                    question=doubt_question
+                )
+            
+            # Store answer in session
+            st.session_state.doubt_answer = result
+            st.session_state.doubt_question = doubt_question
+            
+        except Exception as e:
+            handle_api_error(e, "Doubt submission")
+
+# Display answer if available
+if st.session_state.doubt_answer:
+    answer_data = st.session_state.doubt_answer
+    in_scope = answer_data.get('in_scope', False)
+    answer = answer_data.get('answer', '')
+    
+    if in_scope:
+        st.success("✅ Answer:")
+        st.markdown(answer)
+    else:
+        st.info("ℹ️ Out of Scope:")
+        st.markdown(answer)
+    
+    st.caption("💡 This is a one-time answer. For follow-up questions, please submit a new question.")
+
 # Navigation and action buttons
 st.divider()
 

@@ -340,6 +340,83 @@ if quiz_evaluated and cached_quiz and cached_quiz.get('evaluation'):
         
         st.divider()
     
+    # Ask a Doubt section
+    st.subheader("💬 Ask a Doubt")
+    
+    st.markdown("""
+    Have a question about this quiz or module? Ask here for a quick clarification.
+    """)
+    
+    # Initialize doubt state in session for quiz page
+    if 'quiz_doubt_answer' not in st.session_state:
+        st.session_state.quiz_doubt_answer = None
+    if 'quiz_doubt_question' not in st.session_state:
+        st.session_state.quiz_doubt_question = ""
+    
+    # Doubt input form
+    with st.form(key=f"quiz_doubt_form_{selected_module_id}", clear_on_submit=False):
+        quiz_doubt_question = st.text_area(
+            "Your question:",
+            value=st.session_state.quiz_doubt_question,
+            placeholder="e.g., Why did I get question 3 wrong? Can you explain the concept?",
+            help="Ask a specific question about this module's content or quiz",
+            max_chars=500,
+            height=100
+        )
+        
+        col_submit, col_clear = st.columns([1, 1])
+        
+        with col_submit:
+            submit_quiz_doubt = st.form_submit_button("Submit Question", type="primary", use_container_width=True)
+        
+        with col_clear:
+            clear_quiz_doubt = st.form_submit_button("Clear", use_container_width=True)
+    
+    # Handle clear button
+    if clear_quiz_doubt:
+        st.session_state.quiz_doubt_answer = None
+        st.session_state.quiz_doubt_question = ""
+        st.rerun()
+    
+    # Handle submit button
+    if submit_quiz_doubt:
+        if not quiz_doubt_question or len(quiz_doubt_question.strip()) < 5:
+            show_warning("Please enter a question (at least 5 characters)")
+        else:
+            try:
+                # Import doubt service
+                from services.doubt_service import doubt_service
+                
+                with st.spinner("Thinking..."):
+                    result = doubt_service.ask_doubt(
+                        module_id=selected_module_id,
+                        question=quiz_doubt_question
+                    )
+                
+                # Store answer in session
+                st.session_state.quiz_doubt_answer = result
+                st.session_state.quiz_doubt_question = quiz_doubt_question
+                
+            except Exception as e:
+                handle_api_error(e, "Doubt submission")
+    
+    # Display answer if available
+    if st.session_state.quiz_doubt_answer:
+        answer_data = st.session_state.quiz_doubt_answer
+        in_scope = answer_data.get('in_scope', False)
+        answer = answer_data.get('answer', '')
+        
+        if in_scope:
+            st.success("✅ Answer:")
+            st.markdown(answer)
+        else:
+            st.info("ℹ️ Out of Scope:")
+            st.markdown(answer)
+        
+        st.caption("💡 This is a one-time answer. For follow-up questions, please submit a new question.")
+    
+    st.divider()
+    
     # Navigation buttons
     st.subheader("Actions")
     
