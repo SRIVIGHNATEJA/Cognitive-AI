@@ -309,6 +309,88 @@ class AnalyticsService:
         logger.info(f"Average quiz accuracy: {avg_accuracy:.1f}%")
         
         return avg_accuracy
+    
+    def get_quiz_attempt_history(self, quiz_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all attempts for a specific quiz, ordered by attempt_number.
+        
+        Searches through all evaluation cache files to find evaluations
+        matching the quiz_id, then sorts by attempt_number.
+        
+        Args:
+            quiz_id: Quiz identifier
+            
+        Returns:
+            List of attempt data dictionaries, sorted by attempt_number
+            Each dict contains: attempt_number, score, accuracy, time_taken_seconds, evaluated_at
+        """
+        logger.debug(f"Getting attempt history for quiz '{quiz_id}'")
+        
+        attempts = []
+        quizzes_dir = self.cache_service.cache_dir / 'quizzes'
+        
+        if not quizzes_dir.exists():
+            logger.warning(f"Quizzes directory not found")
+            return attempts
+        
+        # Search through all evaluation files
+        for eval_file in quizzes_dir.glob('evaluation_*.json'):
+            try:
+                json_data = eval_file.read_text(encoding='utf-8')
+                evaluation = self.cache_service._deserialize_data(json_data)
+                
+                # Check if this evaluation matches the quiz_id
+                if evaluation.get("quiz_id") == quiz_id:
+                    # Extract relevant fields
+                    attempt_data = {
+                        "attempt_number": evaluation.get("attempt_number", 1),
+                        "score": evaluation.get("score", 0),
+                        "accuracy": evaluation.get("accuracy", 0.0),
+                        "time_taken_seconds": evaluation.get("time_taken_seconds", 0),
+                        "evaluated_at": evaluation.get("evaluated_at", "")
+                    }
+                    attempts.append(attempt_data)
+                    logger.debug(f"Found attempt {attempt_data['attempt_number']} for quiz {quiz_id}")
+                    
+            except Exception as e:
+                logger.warning(f"Failed to read evaluation file {eval_file}: {str(e)}")
+                continue
+        
+        # Sort by attempt_number
+        attempts.sort(key=lambda x: x["attempt_number"])
+        
+        logger.info(f"Found {len(attempts)} attempts for quiz '{quiz_id}'")
+        return attempts
+    
+    def calculate_improvement_rate(self, attempts: List[Dict[str, Any]]) -> Optional[float]:
+        """
+        Calculate improvement rate from first to latest attempt.
+        
+        Formula: (latest_accuracy - first_accuracy) / first_accuracy * 100
+        
+        Args:
+            attempts: List of attempt data dictionaries (must be sorted by attempt_number)
+            
+        Returns:
+            Percentage improvement (e.g., 50.0 for 50% improvement)
+            None if less than 2 attempts or first attempt has 0% accuracy
+        """
+        if len(attempts) < 2:
+            logger.debug("Less than 2 attempts, no improvement rate to calculate")
+            return None
+        
+        first_accuracy = attempts[0].get("accuracy", 0.0)
+        latest_accuracy = attempts[-1].get("accuracy", 0.0)
+        
+        # Avoid division by zero
+        if first_accuracy == 0.0:
+            logger.debug("First attempt has 0% accuracy, cannot calculate improvement rate")
+            return None
+        
+        improvement_rate = ((latest_accuracy - first_accuracy) / first_accuracy) * 100.0
+        logger.info(f"Improvement rate: {improvement_rate:.1f}% ({first_accuracy:.1f}% → {latest_accuracy:.1f}%)")
+        
+        return improvement_rate
 
 
 # Global analytics service instance

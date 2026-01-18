@@ -12,7 +12,9 @@ from app.models import (
     AnalyticsOverviewResponse,
     ModuleProgress,
     WeakAreasResponse,
-    Module
+    Module,
+    QuizAttemptHistoryResponse,
+    QuizAttemptData
 )
 from app.services.analytics_service import AnalyticsService
 from app.services.cache_service import CacheService
@@ -234,4 +236,85 @@ async def get_weak_areas() -> WeakAreasResponse:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to identify weak areas: {str(e)}"
+        )
+
+
+@router.get("/quiz/{quiz_id}/attempts", response_model=QuizAttemptHistoryResponse)
+async def get_quiz_attempt_analytics(quiz_id: str) -> QuizAttemptHistoryResponse:
+    """
+    Get attempt-by-attempt analytics for a specific quiz.
+    
+    Returns all attempts for the quiz with score, accuracy, and time data.
+    Calculates improvement rate from first to latest attempt.
+    
+    Args:
+        quiz_id: Quiz identifier
+        
+    Returns:
+        QuizAttemptHistoryResponse with attempt history and improvement rate
+        
+    Raises:
+        HTTPException 404: If quiz not found or no attempts exist
+        HTTPException 500: If analytics calculation fails
+    """
+    try:
+        logger.info(f"Fetching attempt analytics for quiz '{quiz_id}'")
+        
+        # Get attempt history
+        attempts = analytics_service.get_quiz_attempt_history(quiz_id)
+        
+        if not attempts:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No attempts found for quiz '{quiz_id}'"
+            )
+        
+        # Extract module_id from first attempt
+        # (all attempts for same quiz have same module_id)
+        quizzes_dir = cache_service.cache_dir / 'quizzes'
+        module_id = None
+        
+        for eval_file in quizzes_dir.glob('evaluation_*.json'):
+            try:
+                json_data = eval_file.read_text(encoding='utf-8')
+                evaluation = cache_service._deserialize_data(json_data)
+                
+                if evaluation.get("quiz_id") == quiz_id:
+                    module_id = evaluation.get("module_id")
+                    break
+            except Exception:
+                continue
+        
+        if not module_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Module ID not found for quiz '{quiz_id}'"
+            )
+        
+        # Calculate improvement rate
+        improvement_rate = analytics_service.calculate_improvement_rate(attempts)
+        
+        # Convert to QuizAttemptData models
+        attempt_models = [QuizAttemptData(**attempt) for attempt in attempts]
+        
+        logger.info(
+            f"Quiz '{quiz_id}' analytics: {len(attempts)} attempts, "
+            f"improvement rate: {improvement_rate:.1f}%" if improvement_rate else "N/A"
+        )
+        
+        return QuizAttemptHistoryResponse(
+            success=True,
+            quiz_id=quiz_id,
+            module_id=module_id,
+            attempts=attempt_models,
+            improvement_rate=improvement_rate
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get quiz attempt analytics for '{quiz_id}': {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to calculate quiz analytics: {str(e)}"
         )

@@ -771,6 +771,63 @@ class WeakAreasResponse(BaseModel):
     }
 
 
+class QuizAttemptData(BaseModel):
+    """Data for a single quiz attempt."""
+    attempt_number: int = Field(..., ge=1, description="Attempt number (1, 2, 3, ...)")
+    score: int = Field(..., ge=0, description="Raw score (number of correct answers)")
+    accuracy: float = Field(..., ge=0, le=100, description="Accuracy percentage")
+    time_taken_seconds: int = Field(..., ge=0, description="Time taken in seconds")
+    evaluated_at: str = Field(..., description="Evaluation timestamp (ISO format)")
+    
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "attempt_number": 1,
+                "score": 3,
+                "accuracy": 60.0,
+                "time_taken_seconds": 20,
+                "evaluated_at": "2026-01-19T10:30:00"
+            }
+        }
+    }
+
+
+class QuizAttemptHistoryResponse(BaseModel):
+    """Response model for quiz attempt history analytics."""
+    success: bool = True
+    quiz_id: str = Field(..., description="Quiz identifier")
+    module_id: str = Field(..., description="Module identifier")
+    attempts: list[QuizAttemptData] = Field(..., description="List of attempts ordered by attempt_number")
+    improvement_rate: Optional[float] = Field(None, description="Improvement rate from first to latest attempt (%)")
+    
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "success": True,
+                "quiz_id": "quiz_abc123",
+                "module_id": "mod_xyz789",
+                "attempts": [
+                    {
+                        "attempt_number": 1,
+                        "score": 2,
+                        "accuracy": 40.0,
+                        "time_taken_seconds": 20,
+                        "evaluated_at": "2026-01-19T10:30:00"
+                    },
+                    {
+                        "attempt_number": 2,
+                        "score": 4,
+                        "accuracy": 80.0,
+                        "time_taken_seconds": 15,
+                        "evaluated_at": "2026-01-19T11:00:00"
+                    }
+                ],
+                "improvement_rate": 100.0
+            }
+        }
+    }
+
+
 # Doubt Resolution Models
 
 class DoubtRequest(BaseModel):

@@ -214,6 +214,97 @@ if quiz_evaluated and cached_quiz and cached_quiz.get('evaluation'):
     
     st.divider()
     
+    # === EMBEDDED ANALYTICS SECTION ===
+    # Fetch and display attempt analytics if multiple attempts exist
+    try:
+        import requests
+        import matplotlib.pyplot as plt
+        import matplotlib
+        matplotlib.use('Agg')
+        
+        analytics_response = requests.get(f"{config.BACKEND_URL}/api/analytics/quiz/{quiz_id}/attempts", timeout=5)
+        
+        if analytics_response.status_code == 200:
+            analytics_data = analytics_response.json()
+            attempts = analytics_data.get('attempts', [])
+            
+            # Only show analytics if there are multiple attempts
+            if len(attempts) > 1:
+                st.subheader("📊 Progress Across Attempts")
+                
+                # Display improvement rate
+                improvement_rate = analytics_data.get('improvement_rate')
+                if improvement_rate is not None:
+                    if improvement_rate > 0:
+                        st.success(f"🎉 Great progress! You improved by **{improvement_rate:.1f}%** from your first attempt!")
+                    elif improvement_rate < 0:
+                        st.info(f"📚 Your accuracy decreased by {abs(improvement_rate):.1f}%. Review the material and try again!")
+                    else:
+                        st.info("Your accuracy remained the same. Keep practicing!")
+                
+                # Attempt history table
+                with st.expander("📋 View Attempt History", expanded=False):
+                    table_data = []
+                    for attempt in attempts:
+                        table_data.append({
+                            "Attempt": attempt["attempt_number"],
+                            "Score": f"{attempt['score']}/5",
+                            "Accuracy": f"{attempt['accuracy']:.1f}%",
+                            "Time": f"{attempt['time_taken_seconds']}s"
+                        })
+                    st.dataframe(table_data, use_container_width=True, hide_index=True)
+                
+                # Score progression graph
+                with st.expander("📈 Score Progression", expanded=True):
+                    attempt_numbers = [a["attempt_number"] for a in attempts]
+                    scores = [a["score"] for a in attempts]
+                    
+                    fig, ax = plt.subplots(figsize=(10, 5))
+                    ax.plot(attempt_numbers, scores, marker='o', linewidth=2, markersize=8, color='#1f77b4')
+                    ax.axhline(y=3, color='green', linestyle='--', alpha=0.5, label='Passing (3/5)')
+                    ax.set_xlabel('Attempt Number', fontsize=11)
+                    ax.set_ylabel('Score (out of 5)', fontsize=11)
+                    ax.set_title('Score Progression', fontsize=12, fontweight='bold')
+                    ax.grid(True, alpha=0.3)
+                    ax.legend()
+                    ax.set_ylim(0, 5.5)
+                    ax.set_xticks(attempt_numbers)
+                    st.pyplot(fig)
+                    plt.close(fig)
+                
+                # Time progression graph (only if 2+ attempts)
+                if len(attempts) >= 2:
+                    with st.expander("⏱️ Time Progression", expanded=False):
+                        times = [a["time_taken_seconds"] for a in attempts]
+                        
+                        fig, ax = plt.subplots(figsize=(10, 5))
+                        ax.plot(attempt_numbers, times, marker='s', linewidth=2, markersize=8, color='#ff7f0e')
+                        ax.set_xlabel('Attempt Number', fontsize=11)
+                        ax.set_ylabel('Time Taken (seconds)', fontsize=11)
+                        ax.set_title('Time Progression', fontsize=12, fontweight='bold')
+                        ax.grid(True, alpha=0.3)
+                        ax.set_xticks(attempt_numbers)
+                        st.pyplot(fig)
+                        plt.close(fig)
+                        
+                        # Time improvement message
+                        first_time = attempts[0]["time_taken_seconds"]
+                        latest_time = attempts[-1]["time_taken_seconds"]
+                        time_diff = first_time - latest_time
+                        
+                        if time_diff > 0:
+                            st.success(f"⚡ You're getting faster! Saved {time_diff} seconds from first to latest attempt.")
+                        elif time_diff < 0:
+                            st.info(f"⏱️ You took {abs(time_diff)} more seconds on the latest attempt (taking time to think is good!).")
+                
+                st.divider()
+    
+    except Exception as e:
+        # Silently fail - analytics is optional enhancement
+        pass
+    
+    # === END ANALYTICS SECTION ===
+    
     # Display detailed results
     st.subheader("Detailed Results")
     
