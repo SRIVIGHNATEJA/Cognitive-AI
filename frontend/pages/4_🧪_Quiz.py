@@ -114,26 +114,49 @@ prerequisites = current_module.get('prerequisites', [])
 # Display module info
 st.divider()
 
-col1, col2 = st.columns([3, 1])
-
-with col1:
+with st.container():
     st.markdown(f"### {order}. {topic_name}")
+    st.caption("Test your knowledge with a quiz")
     
-    if prerequisites:
-        # Build module_id -> topic_name mapping
-        module_id_to_name = {
-            m.get('module_id'): m.get('topic_name', 'Unknown')
-            for m in modules
-        }
-        prereq_names = [module_id_to_name.get(p, p) for p in prerequisites]
-        st.caption(f"**Prerequisites:** {', '.join(prereq_names)}")
+    # Module metrics
+    if mode == 'untimed':
+        col_mod1, col_mod2 = st.columns([2, 1])
+        
+        with col_mod1:
+            if prerequisites:
+                # Build module_id -> topic_name mapping
+                module_id_to_name = {
+                    m.get('module_id'): m.get('topic_name', 'Unknown')
+                    for m in modules
+                }
+                prereq_names = [module_id_to_name.get(p, p) for p in prerequisites]
+                st.write(f"**Prerequisites:** {', '.join(prereq_names)}")
+            else:
+                st.write("**Prerequisites:** None")
+        
+        with col_mod2:
+            st.metric("Order", f"#{order}")
     else:
-        st.caption("**Prerequisites:** None")
-
-with col2:
-    # Only show time in timed mode
-    if mode != 'untimed':
-        st.metric("Time", format_hours(estimated_hours))
+        # Timed mode: show time metric
+        col_mod1, col_mod2, col_mod3 = st.columns([2, 1, 1])
+        
+        with col_mod1:
+            if prerequisites:
+                # Build module_id -> topic_name mapping
+                module_id_to_name = {
+                    m.get('module_id'): m.get('topic_name', 'Unknown')
+                    for m in modules
+                }
+                prereq_names = [module_id_to_name.get(p, p) for p in prerequisites]
+                st.write(f"**Prerequisites:** {', '.join(prereq_names)}")
+            else:
+                st.write("**Prerequisites:** None")
+        
+        with col_mod2:
+            st.metric("Time", format_hours(estimated_hours))
+        
+        with col_mod3:
+            st.metric("Order", f"#{order}")
 
 st.divider()
 
@@ -167,53 +190,70 @@ quiz_evaluated = st.session_state.get('quiz_evaluated', False)
 
 # If quiz is evaluated, show results
 if quiz_evaluated and cached_quiz and cached_quiz.get('evaluation'):
-    st.markdown("### 🎯 Quiz Results")
-    
-    evaluation = cached_quiz['evaluation']
-    attempt_num = evaluation.get('attempt_number', 1)
-    quiz_id = cached_quiz['quiz']['quiz_id']
-    
-    # Display quiz info and attempt number
-    col_info1, col_info2 = st.columns(2)
-    with col_info1:
-        st.caption(f"**Quiz ID:** `{quiz_id}`")
-    with col_info2:
-        if attempt_num > 1:
-            st.caption(f"**Attempt:** {attempt_num}")
-        else:
-            st.caption(f"**Attempt:** {attempt_num} (First attempt)")
-    
-    # Display score
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Score", f"{evaluation.get('score', 0)}/5")
-    
-    with col2:
-        st.metric("Accuracy", f"{evaluation.get('accuracy', 0):.1f}%")
-    
-    with col3:
+    # === RESULTS SUMMARY CARD ===
+    with st.container():
+        st.markdown("### 🎯 Quiz Results")
+        st.caption("Your performance summary")
+        
+        evaluation = cached_quiz['evaluation']
+        attempt_num = evaluation.get('attempt_number', 1)
+        quiz_id = cached_quiz['quiz']['quiz_id']
+        
+        # Display quiz info and attempt number
+        col_info1, col_info2 = st.columns(2)
+        with col_info1:
+            st.caption(f"**Quiz ID:** `{quiz_id}`")
+        with col_info2:
+            if attempt_num > 1:
+                st.caption(f"**Attempt:** {attempt_num}")
+            else:
+                st.caption(f"**Attempt:** {attempt_num} (First attempt)")
+        
+        st.divider()
+        
+        # Display score metrics
+        score = evaluation.get('score', 0)
+        accuracy = evaluation.get('accuracy', 0)
         time_taken = evaluation.get('time_taken_seconds', 0)
-        minutes = time_taken // 60
-        seconds = time_taken % 60
-        st.metric("Time Taken", f"{minutes}m {seconds}s")
-    
-    with col4:
         correct = evaluation.get('correct_answers_count', 0)
         incorrect = evaluation.get('incorrect_answers_count', 0)
-        st.metric("Correct/Incorrect", f"{correct}/{incorrect}")
-    
-    # Time limit exceeded warning
-    if evaluation.get('time_limit_exceeded'):
-        st.warning("⏰ Time limit exceeded! Your score may be affected.")
-    
-    # Show if evaluation was cached
-    if evaluation.get('cached'):
-        st.info("📋 Showing cached evaluation results")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            delta_score = score - 3  # Passing score is 3
+            st.metric("Score", f"{score}/5", delta=f"{delta_score:+d} from passing" if delta_score != 0 else None)
+        
+        with col2:
+            st.metric("Accuracy", f"{accuracy:.1f}%")
+        
+        with col3:
+            minutes = time_taken // 60
+            seconds = time_taken % 60
+            st.metric("Time Taken", f"{minutes}m {seconds}s")
+        
+        with col4:
+            st.metric("Correct/Incorrect", f"{correct}/{incorrect}")
+        
+        # Key insight based on performance
+        if accuracy >= 80:
+            st.success("🎉 Excellent work! You've mastered this module.")
+        elif accuracy >= 60:
+            st.info("📚 Good progress! Review the explanations below to strengthen your understanding.")
+        else:
+            st.warning("💪 Keep practicing! Focus on the concepts explained below.")
+        
+        # Time limit exceeded warning
+        if evaluation.get('time_limit_exceeded'):
+            st.warning("⏰ Time limit exceeded! Your score may be affected.")
+        
+        # Show if evaluation was cached
+        if evaluation.get('cached'):
+            st.caption("📋 Showing cached evaluation results")
     
     st.divider()
     
-    # === EMBEDDED ANALYTICS SECTION ===
+    # === EMBEDDED ANALYTICS SECTION (INSIGHT-FIRST) ===
     # Fetch and display attempt analytics if multiple attempts exist
     try:
         import requests
@@ -229,73 +269,89 @@ if quiz_evaluated and cached_quiz and cached_quiz.get('evaluation'):
             
             # Only show analytics if there are multiple attempts
             if len(attempts) > 1:
-                st.markdown("### 📊 Progress Across Attempts")
-                st.caption("Track your improvement over multiple quiz attempts")
-                
-                # Display improvement rate
-                improvement_rate = analytics_data.get('improvement_rate')
-                if improvement_rate is not None:
-                    if improvement_rate > 0:
-                        st.success(f"🎉 Great progress! You improved by **{improvement_rate:.1f}%** from your first attempt!")
-                    elif improvement_rate < 0:
-                        st.info(f"📚 Your accuracy decreased by {abs(improvement_rate):.1f}%. Review the material and try again!")
-                    else:
-                        st.info("Your accuracy remained the same. Keep practicing!")
-                
-                # Attempt history table
-                with st.expander("📋 View Attempt History", expanded=False):
-                    table_data = []
-                    for attempt in attempts:
-                        table_data.append({
-                            "Attempt": attempt["attempt_number"],
-                            "Score": f"{attempt['score']}/5",
-                            "Accuracy": f"{attempt['accuracy']:.1f}%",
-                            "Time": f"{attempt['time_taken_seconds']}s"
-                        })
-                    st.dataframe(table_data, use_container_width=True, hide_index=True)
-                
-                # Score progression graph
-                with st.expander("📈 Score Progression", expanded=True):
-                    attempt_numbers = [a["attempt_number"] for a in attempts]
-                    scores = [a["score"] for a in attempts]
+                with st.container():
+                    st.markdown("### 📊 Progress Tracking")
+                    st.caption("Your improvement across multiple attempts")
                     
-                    fig, ax = plt.subplots(figsize=(10, 5))
-                    ax.plot(attempt_numbers, scores, marker='o', linewidth=2, markersize=8, color='#1f77b4')
-                    ax.axhline(y=3, color='green', linestyle='--', alpha=0.5, label='Passing (3/5)')
-                    ax.set_xlabel('Attempt Number', fontsize=11)
-                    ax.set_ylabel('Score (out of 5)', fontsize=11)
-                    ax.set_title('Score Progression', fontsize=12, fontweight='bold')
-                    ax.grid(True, alpha=0.3)
-                    ax.legend()
-                    ax.set_ylim(0, 5.5)
-                    ax.set_xticks(attempt_numbers)
-                    st.pyplot(fig)
-                    plt.close(fig)
-                
-                # Time progression graph (only if 2+ attempts)
-                if len(attempts) >= 2:
-                    with st.expander("⏱️ Time Progression", expanded=False):
-                        times = [a["time_taken_seconds"] for a in attempts]
+                    # KEY INSIGHT FIRST (before graphs)
+                    improvement_rate = analytics_data.get('improvement_rate')
+                    if improvement_rate is not None:
+                        col_a1, col_a2, col_a3 = st.columns(3)
+                        with col_a1:
+                            st.metric("Improvement", f"{improvement_rate:+.1f}%", delta="from first attempt")
+                        with col_a2:
+                            st.metric("Total Attempts", len(attempts))
+                        with col_a3:
+                            max_score = max(a["score"] for a in attempts)
+                            st.metric("Best Score", f"{max_score}/5")
+                        
+                        # Insight message
+                        if improvement_rate > 0:
+                            st.success(f"🎉 Great progress! You improved by **{improvement_rate:.1f}%** from your first attempt!")
+                        elif improvement_rate < 0:
+                            st.info(f"📚 Your accuracy decreased by {abs(improvement_rate):.1f}%. Review the material and try again!")
+                        else:
+                            st.info("Your accuracy remained the same. Keep practicing!")
+                    
+                    # THEN graphs (collapsible)
+                    with st.expander("📈 View Progress Charts", expanded=False):
+                        # Attempt history table
+                        st.markdown("#### Attempt History")
+                        table_data = []
+                        for attempt in attempts:
+                            table_data.append({
+                                "Attempt": attempt["attempt_number"],
+                                "Score": f"{attempt['score']}/5",
+                                "Accuracy": f"{attempt['accuracy']:.1f}%",
+                                "Time": f"{attempt['time_taken_seconds']}s"
+                            })
+                        st.dataframe(table_data, use_container_width=True, hide_index=True)
+                        
+                        st.divider()
+                        
+                        # Score progression graph
+                        st.markdown("#### Score Progression")
+                        attempt_numbers = [a["attempt_number"] for a in attempts]
+                        scores = [a["score"] for a in attempts]
                         
                         fig, ax = plt.subplots(figsize=(10, 5))
-                        ax.plot(attempt_numbers, times, marker='s', linewidth=2, markersize=8, color='#ff7f0e')
+                        ax.plot(attempt_numbers, scores, marker='o', linewidth=2, markersize=8, color='#1f77b4')
+                        ax.axhline(y=3, color='green', linestyle='--', alpha=0.5, label='Passing (3/5)')
                         ax.set_xlabel('Attempt Number', fontsize=11)
-                        ax.set_ylabel('Time Taken (seconds)', fontsize=11)
-                        ax.set_title('Time Progression', fontsize=12, fontweight='bold')
+                        ax.set_ylabel('Score (out of 5)', fontsize=11)
+                        ax.set_title('Score Progression', fontsize=12, fontweight='bold')
                         ax.grid(True, alpha=0.3)
+                        ax.legend()
+                        ax.set_ylim(0, 5.5)
                         ax.set_xticks(attempt_numbers)
                         st.pyplot(fig)
                         plt.close(fig)
                         
-                        # Time improvement message
-                        first_time = attempts[0]["time_taken_seconds"]
-                        latest_time = attempts[-1]["time_taken_seconds"]
-                        time_diff = first_time - latest_time
-                        
-                        if time_diff > 0:
-                            st.success(f"⚡ You're getting faster! Saved {time_diff} seconds from first to latest attempt.")
-                        elif time_diff < 0:
-                            st.info(f"⏱️ You took {abs(time_diff)} more seconds on the latest attempt (taking time to think is good!).")
+                        # Time progression graph (only if 2+ attempts)
+                        if len(attempts) >= 2:
+                            st.divider()
+                            st.markdown("#### Time Progression")
+                            times = [a["time_taken_seconds"] for a in attempts]
+                            
+                            fig, ax = plt.subplots(figsize=(10, 5))
+                            ax.plot(attempt_numbers, times, marker='s', linewidth=2, markersize=8, color='#ff7f0e')
+                            ax.set_xlabel('Attempt Number', fontsize=11)
+                            ax.set_ylabel('Time Taken (seconds)', fontsize=11)
+                            ax.set_title('Time Progression', fontsize=12, fontweight='bold')
+                            ax.grid(True, alpha=0.3)
+                            ax.set_xticks(attempt_numbers)
+                            st.pyplot(fig)
+                            plt.close(fig)
+                            
+                            # Time improvement message
+                            first_time = attempts[0]["time_taken_seconds"]
+                            latest_time = attempts[-1]["time_taken_seconds"]
+                            time_diff = first_time - latest_time
+                            
+                            if time_diff > 0:
+                                st.success(f"⚡ You're getting faster! Saved {time_diff} seconds from first to latest attempt.")
+                            elif time_diff < 0:
+                                st.info(f"⏱️ You took {abs(time_diff)} more seconds on the latest attempt (taking time to think is good!).")
                 
                 st.divider()
     
@@ -305,121 +361,133 @@ if quiz_evaluated and cached_quiz and cached_quiz.get('evaluation'):
     
     # === END ANALYTICS SECTION ===
     
-    # Display detailed results
-    st.markdown("### 📋 Detailed Results")
+    # === DETAILED ANSWERS SECTION (STRUCTURED) ===
+    with st.container():
+        st.markdown("### 📋 Question Review")
+        st.caption("Detailed breakdown with explanations")
+        
+        question_results = evaluation.get('question_results', [])
+        
+        for result in question_results:
+            question_num = result.get('question_number', 0)
+            question_text = result.get('question_text', '')
+            options = result.get('options', [])
+            is_correct = result.get('is_correct', False)
+            user_answer = result.get('user_answer', '')
+            correct_answer = result.get('correct_answer', '')
+            explanation = result.get('explanation', '')
+            
+            # Each question in a sub-container
+            with st.container():
+                # Display question with result indicator
+                if is_correct:
+                    st.success(f"**Question {question_num}:** {question_text} ✅")
+                else:
+                    st.error(f"**Question {question_num}:** {question_text} ❌")
+                
+                # Display options
+                for option in options:
+                    if option == correct_answer:
+                        st.markdown(f"- **{option}** ✓ (Correct answer)")
+                    elif option == user_answer and not is_correct:
+                        st.markdown(f"- **{option}** ✗ (Your answer)")
+                    else:
+                        st.markdown(f"- {option}")
+                
+                # Display explanation
+                if explanation:
+                    st.caption(f"💡 **Explanation:** {explanation}")
+            
+            st.divider()
     
-    question_results = evaluation.get('question_results', [])
-    
-    for result in question_results:
-        question_num = result.get('question_number', 0)
-        question_text = result.get('question_text', '')
-        options = result.get('options', [])
-        is_correct = result.get('is_correct', False)
-        user_answer = result.get('user_answer', '')
-        correct_answer = result.get('correct_answer', '')
-        explanation = result.get('explanation', '')
-        
-        # Display question with result indicator
-        if is_correct:
-            st.success(f"**Question {question_num}:** {question_text} ✅")
-        else:
-            st.error(f"**Question {question_num}:** {question_text} ❌")
-        
-        # Display options
-        for option in options:
-            if option == correct_answer:
-                st.markdown(f"- **{option}** ✓ (Correct answer)")
-            elif option == user_answer and not is_correct:
-                st.markdown(f"- **{option}** ✗ (Your answer)")
-            else:
-                st.markdown(f"- {option}")
-        
-        # Display explanation
-        if explanation:
-            st.caption(f"💡 {explanation}")
-        
-        st.divider()
+    st.divider()
     
     # Ask a Doubt section
     st.divider()
     
-    st.markdown("### 💬 Ask a Doubt")
-    st.caption("Have a question about this quiz or module? Ask here for a quick clarification.")
-    
-    # Initialize doubt state in session for quiz page
-    if 'quiz_doubt_answer' not in st.session_state:
-        st.session_state.quiz_doubt_answer = None
-    if 'quiz_doubt_question' not in st.session_state:
-        st.session_state.quiz_doubt_question = ""
-    
-    # Doubt input form
-    with st.form(key=f"quiz_doubt_form_{selected_module_id}", clear_on_submit=False):
-        quiz_doubt_question = st.text_area(
-            "Your question:",
-            value=st.session_state.quiz_doubt_question,
-            placeholder="e.g., Why did I get question 3 wrong? Can you explain the concept?",
-            help="Ask a specific question about this module's content or quiz",
-            max_chars=500,
-            height=100
-        )
+    with st.container():
+        st.markdown("### 💬 Need Help?")
+        st.caption("Ask a question about this quiz or module")
         
-        col_submit, col_clear = st.columns([1, 1])
+        # Initialize doubt state in session for quiz page
+        if 'quiz_doubt_answer' not in st.session_state:
+            st.session_state.quiz_doubt_answer = None
+        if 'quiz_doubt_question' not in st.session_state:
+            st.session_state.quiz_doubt_question = ""
         
-        with col_submit:
-            submit_quiz_doubt = st.form_submit_button("Submit Question", type="primary", use_container_width=True)
+        # Doubt input form
+        with st.form(key=f"quiz_doubt_form_{selected_module_id}", clear_on_submit=False):
+            quiz_doubt_question = st.text_area(
+                "Your question:",
+                value=st.session_state.quiz_doubt_question,
+                placeholder="e.g., Why did I get question 3 wrong? Can you explain the concept?",
+                help="Ask a specific question about this module's content or quiz",
+                max_chars=500,
+                height=100
+            )
+            
+            col_submit, col_clear = st.columns([1, 1])
+            
+            with col_submit:
+                submit_quiz_doubt = st.form_submit_button("Submit Question", type="primary", use_container_width=True)
+            
+            with col_clear:
+                clear_quiz_doubt = st.form_submit_button("Clear", use_container_width=True)
         
-        with col_clear:
-            clear_quiz_doubt = st.form_submit_button("Clear", use_container_width=True)
-    
-    # Handle clear button
-    if clear_quiz_doubt:
-        st.session_state.quiz_doubt_answer = None
-        st.session_state.quiz_doubt_question = ""
-        st.rerun()
-    
-    # Handle submit button
-    if submit_quiz_doubt:
-        if not quiz_doubt_question or len(quiz_doubt_question.strip()) < 5:
-            show_warning("Please enter a question (at least 5 characters)")
-        else:
-            try:
-                # Import doubt service
-                from services.doubt_service import doubt_service
+        # Handle clear button
+        if clear_quiz_doubt:
+            st.session_state.quiz_doubt_answer = None
+            st.session_state.quiz_doubt_question = ""
+            st.rerun()
+        
+        # Handle submit button
+        if submit_quiz_doubt:
+            if not quiz_doubt_question or len(quiz_doubt_question.strip()) < 5:
+                show_warning("Please enter a question (at least 5 characters)")
+            else:
+                try:
+                    # Import doubt service
+                    from services.doubt_service import doubt_service
+                    
+                    with st.spinner("Thinking..."):
+                        result = doubt_service.ask_doubt(
+                            module_id=selected_module_id,
+                            question=quiz_doubt_question
+                        )
+                    
+                    # Store answer in session
+                    st.session_state.quiz_doubt_answer = result
+                    st.session_state.quiz_doubt_question = quiz_doubt_question
+                    
+                except Exception as e:
+                    handle_api_error(e, "Doubt submission")
+        
+        # Display answer if available
+        if st.session_state.quiz_doubt_answer:
+            st.divider()
+            
+            with st.container():
+                answer_data = st.session_state.quiz_doubt_answer
+                in_scope = answer_data.get('in_scope', False)
+                answer = answer_data.get('answer', '')
                 
-                with st.spinner("Thinking..."):
-                    result = doubt_service.ask_doubt(
-                        module_id=selected_module_id,
-                        question=quiz_doubt_question
-                    )
+                if in_scope:
+                    st.success("✅ Answer:")
+                    st.markdown(answer)
+                else:
+                    st.info("ℹ️ Out of Scope:")
+                    st.markdown(answer)
                 
-                # Store answer in session
-                st.session_state.quiz_doubt_answer = result
-                st.session_state.quiz_doubt_question = quiz_doubt_question
-                
-            except Exception as e:
-                handle_api_error(e, "Doubt submission")
-    
-    # Display answer if available
-    if st.session_state.quiz_doubt_answer:
-        answer_data = st.session_state.quiz_doubt_answer
-        in_scope = answer_data.get('in_scope', False)
-        answer = answer_data.get('answer', '')
-        
-        if in_scope:
-            st.success("✅ Answer:")
-            st.markdown(answer)
-        else:
-            st.info("ℹ️ Out of Scope:")
-            st.markdown(answer)
-        
-        st.caption("💡 This is a one-time answer. For follow-up questions, please submit a new question.")
+                st.caption("💡 This is a one-time answer. For follow-up questions, please submit a new question.")
     
     st.divider()
     
     # Navigation buttons
-    st.markdown("### Actions")
-    
-    col1, col2, col3, col4 = st.columns(4)
+    with st.container():
+        st.markdown("### 🎯 Next Steps")
+        st.caption("Continue your learning journey")
+        
+        col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         if st.button("📚 Back to Content", use_container_width=True):

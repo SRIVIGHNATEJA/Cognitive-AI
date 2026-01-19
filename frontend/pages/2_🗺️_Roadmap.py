@@ -46,119 +46,155 @@ has_roadmap = st.session_state.get('roadmap') is not None
 
 # Roadmap Generation Section
 if not has_roadmap:
-    st.markdown("### Generate Your Roadmap")
-    
-    st.info(f"""
-    **Current Input ID:** `{st.session_state.current_input_id[:20]}...`  
-    
-    Choose your learning mode and generate your personalized roadmap.
-    """)
-    
-    # Mode selection
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("### 🕐 Timed Mode")
-        st.markdown("""
-        - Fixed time limits for each module
-        - Structured learning schedule
-        - Recommended for exam preparation
-        - Includes time-based quizzes
-        """)
-    
-    with col2:
-        st.markdown("### ♾️ Untimed Mode")
-        st.markdown("""
-        - Learn at your own pace
-        - No time pressure
-        - Flexible schedule
-        - Focus on understanding
-        """)
-    
-    st.divider()
-    
-    # Mode selector
-    mode = st.radio(
-        "Select learning mode:",
-        ["Untimed", "Timed"],
-        horizontal=True,
-        help="Choose how you want to learn"
-    )
-    
-    # Map display name to API value
-    mode_value = mode.lower()
-    
-    # Generate button
-    if st.button("🚀 Generate Roadmap", type="primary", use_container_width=True):
+    with st.container():
+        st.markdown("### Generate Your Roadmap")
+        st.caption("Choose your learning mode and create your personalized learning path")
         
-        def generate():
-            """Generate roadmap from backend."""
-            return roadmap_service.generate_roadmap(
-                st.session_state.current_input_id,
-                mode_value
-            )
+        st.info(f"**Current Input ID:** `{st.session_state.current_input_id[:20]}...`")
         
-        # Execute with loading indicator
-        try:
-            result = with_loading(
-                generate,
-                loading_message="Generating your personalized roadmap...",
-                info_message="⏳ This may take up to 30 seconds. Please wait..."
-            )
-            
-            if result:
-                # Update session state
-                st.session_state.roadmap = result
-                st.session_state.roadmap_mode = result.get('mode')
+        st.divider()
+        
+        # Card-based mode selection
+        st.markdown("#### Select Learning Mode")
+        
+        col1, col2 = st.columns(2, gap="large")
+        
+        with col1:
+            with st.container():
+                st.markdown("### 🕐 Timed Mode")
+                st.markdown("""
+                **Best for:**
+                - Exam preparation
+                - Structured learning
+                - Time management practice
                 
-                # Show success
-                show_success(f"Roadmap generated successfully! {result.get('total_modules', 0)} modules created.")
+                **Features:**
+                - Fixed time limits per module
+                - Time-based quizzes
+                - Structured schedule
+                """)
+                if st.button("Select Timed Mode", key="select_timed", type="primary", use_container_width=True):
+                    mode_value = "timed"
+                    
+                    def generate():
+                        """Generate roadmap from backend."""
+                        return roadmap_service.generate_roadmap(
+                            st.session_state.current_input_id,
+                            mode_value
+                        )
+                    
+                    # Execute with loading indicator
+                    try:
+                        result = with_loading(
+                            generate,
+                            loading_message="Generating your personalized roadmap...",
+                            info_message="⏳ This may take up to 30 seconds. Please wait..."
+                        )
+                        
+                        if result:
+                            # Update session state
+                            st.session_state.roadmap = result
+                            st.session_state.roadmap_mode = result.get('mode')
+                            
+                            # Show success
+                            show_success(f"Roadmap generated successfully! {result.get('total_modules', 0)} modules created.")
+                            
+                            # Rerun to show roadmap
+                            st.rerun()
+                            
+                    except Exception as e:
+                        handle_api_error(e, "Roadmap generation")
+        
+        with col2:
+            with st.container():
+                st.markdown("### ♾️ Untimed Mode")
+                st.markdown("""
+                **Best for:**
+                - Self-paced learning
+                - Deep understanding
+                - Flexible schedule
                 
-                # Rerun to show roadmap
-                st.rerun()
-                
-        except Exception as e:
-            handle_api_error(e, "Roadmap generation")
+                **Features:**
+                - No time pressure
+                - Learn at your own pace
+                - Focus on mastery
+                """)
+                if st.button("Select Untimed Mode", key="select_untimed", type="primary", use_container_width=True):
+                    mode_value = "untimed"
+                    
+                    def generate():
+                        """Generate roadmap from backend."""
+                        return roadmap_service.generate_roadmap(
+                            st.session_state.current_input_id,
+                            mode_value
+                        )
+                    
+                    # Execute with loading indicator
+                    try:
+                        result = with_loading(
+                            generate,
+                            loading_message="Generating your personalized roadmap...",
+                            info_message="⏳ This may take up to 30 seconds. Please wait..."
+                        )
+                        
+                        if result:
+                            # Update session state
+                            st.session_state.roadmap = result
+                            st.session_state.roadmap_mode = result.get('mode')
+                            
+                            # Show success
+                            show_success(f"Roadmap generated successfully! {result.get('total_modules', 0)} modules created.")
+                            
+                            # Rerun to show roadmap
+                            st.rerun()
+                            
+                    except Exception as e:
+                        handle_api_error(e, "Roadmap generation")
 
 # Display Roadmap Section
 else:
     roadmap = st.session_state.roadmap
     mode = roadmap.get('mode', 'unknown')
     
-    # Roadmap header
-    # In untimed mode, hide time information
-    if mode == 'untimed':
-        col1, col2 = st.columns([3, 1])
+    # Roadmap summary card
+    with st.container():
+        st.markdown("### 🗺️ Your Learning Path")
+        st.caption("Personalized roadmap based on your content")
         
-        with col1:
-            st.markdown("### Your Learning Path")
-        
-        with col2:
-            mode_display = mode.title()
-            st.metric("Mode", mode_display)
-    else:
-        # Timed mode: show all metrics including time
-        col1, col2, col3 = st.columns([2, 1, 1])
-        
-        with col1:
-            st.markdown("### Your Learning Path")
-        
-        with col2:
-            mode_display = mode.title()
-            st.metric("Mode", mode_display)
-        
-        with col3:
-            total_hours = roadmap.get('total_estimated_hours', 0)
-            st.metric("Total Time", format_hours(total_hours))
-    
-    # Roadmap info
-    total_modules = roadmap.get('total_modules', 0)
-    cached = roadmap.get('cached', False)
-    
-    if cached:
-        st.info(f"📋 Showing cached roadmap with {total_modules} modules")
-    else:
-        st.success(f"✨ Fresh roadmap with {total_modules} modules")
+        # Roadmap metrics
+        if mode == 'untimed':
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                mode_display = mode.title()
+                st.metric("Mode", mode_display)
+            
+            with col2:
+                total_modules = roadmap.get('total_modules', 0)
+                st.metric("Total Modules", total_modules)
+            
+            with col3:
+                cached = roadmap.get('cached', False)
+                st.metric("Status", "Cached" if cached else "Fresh")
+        else:
+            # Timed mode: show all metrics including time
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                mode_display = mode.title()
+                st.metric("Mode", mode_display)
+            
+            with col2:
+                total_modules = roadmap.get('total_modules', 0)
+                st.metric("Total Modules", total_modules)
+            
+            with col3:
+                total_hours = roadmap.get('total_estimated_hours', 0)
+                st.metric("Total Time", format_hours(total_hours))
+            
+            with col4:
+                cached = roadmap.get('cached', False)
+                st.metric("Status", "Cached" if cached else "Fresh")
     
     st.divider()
     
@@ -168,7 +204,8 @@ else:
     if not modules:
         show_warning("No modules found in roadmap.")
     else:
-        st.markdown(f"### Modules ({len(modules)})")
+        st.markdown(f"### 📚 Learning Modules")
+        st.caption(f"{len(modules)} modules in your personalized learning path")
         
         # Build module_id -> topic_name mapping for prerequisite display
         module_id_to_name = {
@@ -176,7 +213,7 @@ else:
             for module in modules
         }
         
-        # Display modules as cards
+        # Display modules as enhanced cards
         for module in modules:
             module_id = module.get('module_id', 'unknown')
             topic_name = module.get('topic_name', 'Untitled Module')
@@ -186,125 +223,138 @@ else:
             
             # Create expandable card for each module
             with st.expander(f"**{order}. {topic_name}**", expanded=False):
-                # In untimed mode, don't show time metric
-                if mode == 'untimed':
-                    st.write(f"**Module ID:** `{module_id}`")
-                    
-                    if prerequisites:
-                        prereq_count = len(prerequisites)
-                        st.write(f"**Prerequisites:** {prereq_count} module(s)")
-                        with st.expander("View Prerequisites"):
-                            for prereq_id in prerequisites:
-                                # Map prerequisite ID to name, fallback to ID if not found
-                                prereq_name = module_id_to_name.get(prereq_id, prereq_id)
-                                st.text(f"• {prereq_name}")
-                    else:
-                        st.write("**Prerequisites:** None")
-                else:
-                    # Timed mode: show time metric
-                    col1, col2 = st.columns([3, 1])
-                    
-                    with col1:
-                        st.write(f"**Module ID:** `{module_id}`")
+                with st.container():
+                    # Module details
+                    if mode == 'untimed':
+                        col_mod1, col_mod2 = st.columns([2, 1])
                         
-                        if prerequisites:
-                            prereq_count = len(prerequisites)
-                            st.write(f"**Prerequisites:** {prereq_count} module(s)")
-                            with st.expander("View Prerequisites"):
-                                for prereq_id in prerequisites:
-                                    # Map prerequisite ID to name, fallback to ID if not found
-                                    prereq_name = module_id_to_name.get(prereq_id, prereq_id)
-                                    st.text(f"• {prereq_name}")
-                        else:
-                            st.write("**Prerequisites:** None")
+                        with col_mod1:
+                            st.caption(f"**Module ID:** `{module_id}`")
+                            
+                            if prerequisites:
+                                prereq_count = len(prerequisites)
+                                st.write(f"**Prerequisites:** {prereq_count} module(s)")
+                                with st.expander("View Prerequisites", expanded=False):
+                                    for prereq_id in prerequisites:
+                                        prereq_name = module_id_to_name.get(prereq_id, prereq_id)
+                                        st.text(f"• {prereq_name}")
+                            else:
+                                st.write("**Prerequisites:** None")
+                        
+                        with col_mod2:
+                            st.metric("Order", f"#{order}")
+                    else:
+                        # Timed mode: show time metric
+                        col_mod1, col_mod2, col_mod3 = st.columns([2, 1, 1])
+                        
+                        with col_mod1:
+                            st.caption(f"**Module ID:** `{module_id}`")
+                            
+                            if prerequisites:
+                                prereq_count = len(prerequisites)
+                                st.write(f"**Prerequisites:** {prereq_count} module(s)")
+                                with st.expander("View Prerequisites", expanded=False):
+                                    for prereq_id in prerequisites:
+                                        prereq_name = module_id_to_name.get(prereq_id, prereq_id)
+                                        st.text(f"• {prereq_name}")
+                            else:
+                                st.write("**Prerequisites:** None")
+                        
+                        with col_mod2:
+                            st.metric("Time", format_hours(estimated_hours))
+                        
+                        with col_mod3:
+                            st.metric("Order", f"#{order}")
                     
-                    with col2:
-                        st.metric("Time", format_hours(estimated_hours))
-                
-                # Action buttons
-                col_a, col_b = st.columns(2)
-                
-                with col_a:
-                    if st.button(
-                        "📚 View Content",
-                        key=f"content_{module_id}",
-                        use_container_width=True
-                    ):
-                        # Set current module and navigate to content page
-                        st.session_state.current_module_id = module_id
-                        st.session_state.current_module = module
-                        st.switch_page("pages/3_📚_Content.py")
-                
-                with col_b:
-                    if st.button(
-                        "📝 Take Quiz",
-                        key=f"quiz_{module_id}",
-                        use_container_width=True
-                    ):
-                        # Set current module and navigate to quiz page
-                        st.session_state.current_module_id = module_id
-                        st.session_state.current_module = module
-                        st.switch_page("pages/4_🧪_Quiz.py")
+                    st.divider()
+                    
+                    # Action buttons
+                    col_a, col_b = st.columns(2)
+                    
+                    with col_a:
+                        if st.button(
+                            "📚 View Content",
+                            key=f"content_{module_id}",
+                            use_container_width=True,
+                            type="primary"
+                        ):
+                            # Set current module and navigate to content page
+                            st.session_state.current_module_id = module_id
+                            st.session_state.current_module = module
+                            st.switch_page("pages/3_📚_Content.py")
+                    
+                    with col_b:
+                        if st.button(
+                            "🧪 Take Quiz",
+                            key=f"quiz_{module_id}",
+                            use_container_width=True
+                        ):
+                            # Set current module and navigate to quiz page
+                            st.session_state.current_module_id = module_id
+                            st.session_state.current_module = module
+                            st.switch_page("pages/4_🧪_Quiz.py")
     
     st.divider()
     
     # Roadmap actions
-    st.markdown("### Roadmap Actions")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Refresh roadmap
-        if st.button("🔄 Refresh Roadmap", use_container_width=True):
-            try:
-                with st.spinner("Fetching roadmap..."):
-                    result = roadmap_service.get_roadmap()
-                    
-                    # Update session state
-                    st.session_state.roadmap = result
-                    st.session_state.roadmap_mode = result.get('mode')
-                    
-                    show_success("Roadmap refreshed")
-                    st.rerun()
-                    
-            except Exception as e:
-                handle_api_error(e, "Roadmap refresh")
-    
-    with col2:
-        # Reset roadmap (with confirmation)
-        if st.button("🗑️ Reset Roadmap", use_container_width=True, type="secondary"):
-            st.session_state.confirm_reset = True
-    
-    # Confirmation dialog for reset
-    if st.session_state.get('confirm_reset', False):
-        st.warning("⚠️ Are you sure you want to reset the roadmap? This action cannot be undone.")
+    with st.container():
+        st.markdown("### 🎯 Roadmap Actions")
+        st.caption("Manage your learning roadmap")
         
-        col_yes, col_no = st.columns(2)
+        col1, col2 = st.columns(2)
         
-        with col_yes:
-            if st.button("✅ Yes, Reset", type="primary", use_container_width=True):
+        with col1:
+            # Refresh roadmap
+            if st.button("🔄 Refresh Roadmap", use_container_width=True):
                 try:
-                    with st.spinner("Resetting roadmap..."):
-                        roadmap_service.delete_roadmap()
+                    with st.spinner("Fetching roadmap..."):
+                        result = roadmap_service.get_roadmap()
                         
-                        # Clear session state
-                        st.session_state.roadmap = None
-                        st.session_state.roadmap_mode = None
-                        st.session_state.current_module_id = None
-                        st.session_state.current_module = None
-                        st.session_state.confirm_reset = False
+                        # Update session state
+                        st.session_state.roadmap = result
+                        st.session_state.roadmap_mode = result.get('mode')
                         
-                        show_success("Roadmap reset successfully")
+                        show_success("Roadmap refreshed")
                         st.rerun()
                         
                 except Exception as e:
-                    handle_api_error(e, "Roadmap reset")
-                    st.session_state.confirm_reset = False
+                    handle_api_error(e, "Roadmap refresh")
         
-        with col_no:
-            if st.button("❌ Cancel", use_container_width=True):
-                st.session_state.confirm_reset = False
-                st.rerun()
+        with col2:
+            # Reset roadmap (with confirmation)
+            if st.button("🗑️ Reset Roadmap", use_container_width=True, type="secondary"):
+                st.session_state.confirm_reset = True
+        
+        # Confirmation dialog for reset
+        if st.session_state.get('confirm_reset', False):
+            st.warning("⚠️ Are you sure you want to reset the roadmap? This action cannot be undone.")
+            
+            col_yes, col_no = st.columns(2)
+            
+            with col_yes:
+                if st.button("✅ Yes, Reset", type="primary", use_container_width=True):
+                    try:
+                        with st.spinner("Resetting roadmap..."):
+                            roadmap_service.delete_roadmap()
+                            
+                            # Clear session state
+                            st.session_state.roadmap = None
+                            st.session_state.roadmap_mode = None
+                            st.session_state.current_module_id = None
+                            st.session_state.current_module = None
+                            st.session_state.confirm_reset = False
+                            
+                            show_success("Roadmap reset successfully")
+                            st.rerun()
+                            
+                    except Exception as e:
+                        handle_api_error(e, "Roadmap reset")
+                        st.session_state.confirm_reset = False
+            
+            with col_no:
+                if st.button("❌ Cancel", use_container_width=True):
+                    st.session_state.confirm_reset = False
+                    st.rerun()
 
 # Help section
 st.divider()
