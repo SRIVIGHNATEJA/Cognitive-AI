@@ -21,6 +21,7 @@ from components.error_display import (
     show_error, show_success, show_info, show_warning,
     handle_api_error, display_session_messages
 )
+from ui.sidebar import render_sidebar
 
 # Page configuration
 st.set_page_config(
@@ -28,6 +29,9 @@ st.set_page_config(
     page_icon="📤",
     layout=config.LAYOUT
 )
+
+# Render premium sidebar
+render_sidebar()
 
 st.title("📤 Input")
 st.caption("Upload your syllabus or question bank to get started")

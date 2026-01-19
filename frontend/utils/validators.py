@@ -43,7 +43,7 @@ def validate_file_upload(uploaded_file) -> Tuple[bool, str]:
     return True, "Valid"
 
 
-def validate_text_input(text: str, min_length: int = 10, max_length: int = 10000) -> Tuple[bool, str]:
+def validate_text_input(text: str, min_length: int = 20, max_length: int = 10000) -> Tuple[bool, str]:
     """
     Validate text input.
     

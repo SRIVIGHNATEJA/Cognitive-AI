@@ -36,7 +36,7 @@ def test_file_upload_configuration():
     assert ".pdf" in settings.supported_file_formats
     assert ".pptx" in settings.supported_file_formats
     assert ".docx" in settings.supported_file_formats
-    assert settings.min_extracted_text_length == 100
+    assert settings.min_extracted_text_length == 20
 
 
 def test_quiz_configuration():

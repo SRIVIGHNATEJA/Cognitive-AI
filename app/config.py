@@ -29,11 +29,12 @@ class Settings(BaseSettings):
     ollama_model: str = "qwen2.5:1.5b"
     llm_temperature: float = 0.1
     llm_timeout: int = 120  # seconds
+    llm_num_predict: int = 8192  # Maximum output tokens (ensures complete JSON generation)
     
     # File Upload Settings
     max_file_size_mb: int = 10
     supported_file_formats: list[str] = [".pdf", ".ppt", ".pptx", ".doc", ".docx"]
-    min_extracted_text_length: int = 100
+    min_extracted_text_length: int = 20
     
     # Cache Settings
     cache_dir: str = "cache"

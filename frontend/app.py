@@ -16,6 +16,7 @@ from config import config
 from services.api_client import api_client
 from utils.state_manager import init_session_state
 from components.error_display import show_error, show_success, show_info, show_warning
+from ui.sidebar import render_sidebar
 
 
 # Page configuration
@@ -91,6 +92,8 @@ def initialize_app():
 # Initialize app
 initialize_app()
 
+# Render premium sidebar
+render_sidebar()
 
 # Main content
 st.title(f"{config.PAGE_ICON} {config.PAGE_TITLE}")
@@ -110,71 +113,6 @@ by generating personalized roadmaps, study materials, quizzes, and analytics.
 
 Use the sidebar to navigate between pages.
 """)
-
-# Sidebar
-with st.sidebar:
-    st.header("Navigation")
-    st.markdown("Use the pages above to navigate through the platform.")
-    
-    st.divider()
-    
-    # Session info
-    st.subheader("Session Info")
-    
-    if st.session_state.backend_session_id:
-        st.success("✅ Connected to backend")
-        
-        # Show session details
-        with st.expander("Session Details"):
-            st.text(f"Session ID: {st.session_state.backend_session_id[:16]}...")
-            
-            if st.session_state.current_input_id:
-                st.text(f"Input ID: {st.session_state.current_input_id[:16]}...")
-            
-            if st.session_state.roadmap:
-                st.text(f"Roadmap: {len(st.session_state.roadmap.get('modules', []))} modules")
-            
-            if st.session_state.current_module_id:
-                st.text(f"Current Module: {st.session_state.current_module_id[:16]}...")
-    else:
-        st.warning("⚠️ Not connected to backend")
-    
-    # Refresh button
-    if st.button("🔄 Refresh Session"):
-        with st.spinner("Syncing with backend..."):
-            if sync_backend_session():
-                show_success("Session refreshed successfully")
-                st.rerun()
-            else:
-                show_error("Failed to refresh session")
-    
-    st.divider()
-    
-    # Backend info
-    st.subheader("Backend Info")
-    st.text(f"URL: {config.BACKEND_URL}")
-    
-    # Health check
-    if st.button("🏥 Check Backend Health"):
-        with st.spinner("Checking backend health..."):
-            if check_backend_health():
-                show_success("Backend is healthy")
-            else:
-                show_error("Backend is not responding")
-    
-    st.divider()
-    
-    # Help section
-    with st.expander("ℹ️ Help"):
-        st.markdown("""
-        **Need help?**
-        
-        - Check that the backend is running
-        - Refresh the session if data seems out of sync
-        - Navigate using the sidebar pages
-        - Each page has its own instructions
-        """)
-
 
 # Footer
 st.divider()

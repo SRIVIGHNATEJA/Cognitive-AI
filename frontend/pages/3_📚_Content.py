@@ -20,6 +20,7 @@ from components.error_display import (
     show_error, show_success, show_info, show_warning,
     handle_api_error, display_session_messages
 )
+from ui.sidebar import render_sidebar
 
 # Page configuration
 st.set_page_config(
@@ -28,6 +29,8 @@ st.set_page_config(
     layout=config.LAYOUT
 )
 
+# Render premium sidebar
+render_sidebar()
 st.title("📚 Module Content")
 st.caption("View detailed notes and cheat sheets for each module")
 
