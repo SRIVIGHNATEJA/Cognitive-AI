@@ -41,6 +41,51 @@ st.divider()
 # Display any session messages
 display_session_messages()
 
+# ========================================
+# CACHED ROADMAP DETECTION BANNER
+# ========================================
+# Check if a cached roadmap exists
+has_cached_roadmap = st.session_state.get('roadmap') is not None
+
+if has_cached_roadmap:
+    # Show banner with explicit user choice
+    st.markdown("""
+    <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); padding: 1.5rem; border-radius: 10px; border-left: 4px solid #667eea; margin-bottom: 2rem;">
+        <h3 style="margin: 0 0 0.5rem 0; color: #667eea;">🧠 Existing Learning Session Detected</h3>
+        <p style="margin: 0; color: #666; font-size: 0.95rem;">You already have a learning roadmap generated from a previous syllabus.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # User choice buttons
+    col1, col2 = st.columns(2, gap="large")
+    
+    with col1:
+        if st.button("📚 Continue with Existing Roadmap", type="primary", use_container_width=True, key="continue_existing"):
+            # Navigate to Roadmap page to show cached roadmap
+            st.switch_page("pages/2_🗺️_Roadmap.py")
+    
+    with col2:
+        if st.button("🔄 Start New Syllabus", use_container_width=True, key="start_new"):
+            # Clear existing session data
+            st.session_state.roadmap = None
+            st.session_state.roadmap_mode = None
+            st.session_state.current_module_id = None
+            st.session_state.current_module = None
+            st.session_state.current_input_id = None
+            st.session_state.input_data = None
+            
+            # Show success message
+            show_success("Session cleared. You can now upload a new syllabus.")
+            st.rerun()
+    
+    st.divider()
+    st.info("💡 Choose an option above to continue")
+    st.stop()
+
+# ========================================
+# NORMAL INPUT UI (shown only if no cached roadmap)
+# ========================================
+
 # Card-based input method selection
 st.markdown("### Choose Input Method")
 st.caption("Select how you want to provide your educational content")

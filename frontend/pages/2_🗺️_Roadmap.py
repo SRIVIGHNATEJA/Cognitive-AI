@@ -31,6 +31,7 @@ st.set_page_config(
 
 # Render premium sidebar
 render_sidebar()
+
 st.title("🗺️ Learning Roadmap")
 st.caption("Generate your personalized learning path")
 
@@ -39,15 +40,50 @@ st.divider()
 # Display any session messages
 display_session_messages()
 
-# Check if input exists
-if not st.session_state.get('current_input_id'):
+# Check if roadmap already exists (PRIORITY CHECK)
+has_roadmap = st.session_state.get('roadmap') is not None
+
+# If cached roadmap exists, show it immediately (don't check for input)
+if has_roadmap:
+    # Show info banner at top
+    st.markdown("""
+    <div style="background: rgba(76, 175, 80, 0.1); padding: 1rem; border-radius: 8px; border-left: 3px solid #4caf50; margin-bottom: 1.5rem;">
+        <p style="margin: 0; color: #2e7d32; font-weight: 600;">✅ Existing roadmap loaded from your previous syllabus</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Provide two explicit actions
+    col1, col2 = st.columns([2, 1], gap="medium")
+    
+    with col1:
+        if st.button("✅ Continue with Existing Roadmap", type="primary", use_container_width=True, key="continue_roadmap"):
+            # Just continue showing the roadmap below (no action needed)
+            pass
+    
+    with col2:
+        if st.button("🔄 Start New Syllabus", use_container_width=True, key="reset_from_roadmap"):
+            # Clear existing session data
+            st.session_state.roadmap = None
+            st.session_state.roadmap_mode = None
+            st.session_state.current_module_id = None
+            st.session_state.current_module = None
+            st.session_state.current_input_id = None
+            st.session_state.input_data = None
+            
+            # Show success and navigate to Input
+            show_success("Session cleared. Redirecting to Input page...")
+            st.switch_page("pages/1_📤_Input.py")
+    
+    st.divider()
+    
+    # Continue to show roadmap below (existing code will handle this)
+
+# If no roadmap exists, check for input
+elif not st.session_state.get('current_input_id'):
     show_warning("No input found. Please go to the **Input** page and upload a file or enter text first.")
     st.stop()
 
-# Check if roadmap already exists
-has_roadmap = st.session_state.get('roadmap') is not None
-
-# Roadmap Generation Section
+# Roadmap Generation Section (only if no roadmap exists)
 if not has_roadmap:
     with st.container():
         st.markdown("### Generate Your Roadmap")

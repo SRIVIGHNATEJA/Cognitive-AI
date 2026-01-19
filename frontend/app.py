@@ -95,25 +95,123 @@ initialize_app()
 # Render premium sidebar
 render_sidebar()
 
-# Main content
-st.title(f"{config.PAGE_ICON} {config.PAGE_TITLE}")
-
+# ========================================
+# COMPACT HEADER
+# ========================================
 st.markdown("""
-Welcome to the Cognitive AI Learning Platform! This platform helps you learn effectively
-by generating personalized roadmaps, study materials, quizzes, and analytics.
+<div style="padding: 1rem 0 0.5rem 0;">
+    <h1 style="margin: 0; font-size: 2rem;">🧠 Cognitive AI Learning Platform</h1>
+    <p style="margin: 0.5rem 0 0 0; font-size: 1rem; color: #666;">Your AI-powered learning companion</p>
+</div>
+""", unsafe_allow_html=True)
 
-### Getting Started
+st.divider()
 
-1. **📤 Input**: Upload your syllabus or question bank
-2. **🗺️ Roadmap**: Generate a personalized learning roadmap
-3. **📚 Content**: Access notes and cheat sheets for each module
-4. **📝 Quiz**: Test your knowledge with AI-generated quizzes
-5. **📊 Analytics**: Track your progress and identify weak areas
-6. **❓ Doubt**: Ask questions about any module
+# ========================================
+# MAIN DASHBOARD GRID (2 COLUMNS)
+# ========================================
+col_left, col_right = st.columns(2, gap="large")
 
-Use the sidebar to navigate between pages.
-""")
+# LEFT COLUMN — LEARNING OVERVIEW CARD
+with col_left:
+    with st.container():
+        st.markdown("### 📊 Learning Overview")
+        
+        # Read from existing session state (read-only)
+        roadmap = st.session_state.get('roadmap')
+        current_module = st.session_state.get('current_module')
+        
+        if roadmap:
+            mode = roadmap.get('mode', 'unknown').title()
+            total_modules = roadmap.get('total_modules', 0)
+            
+            # Display learning info
+            col_info1, col_info2 = st.columns(2)
+            with col_info1:
+                st.metric("Learning Mode", mode)
+            with col_info2:
+                st.metric("Total Modules", total_modules)
+            
+            if current_module:
+                topic_name = current_module.get('topic_name', 'Unknown')
+                order = current_module.get('order', 0)
+                
+                st.divider()
+                st.markdown(f"**Current Module:** {topic_name}")
+                st.caption(f"Module {order} of {total_modules}")
+            else:
+                st.divider()
+                st.caption("No module selected yet")
+        else:
+            # No roadmap data
+            st.caption("Learning Mode: —")
+            st.caption("Total Modules: —")
+            st.caption("Current Module: —")
+            st.caption("Module Position: —")
+            
+            st.divider()
+            st.info("📍 Upload a syllabus to get started")
+
+# RIGHT COLUMN — QUICK ACTIONS CARD
+with col_right:
+    with st.container():
+        st.markdown("### ⚡ Quick Actions")
+        
+        current_module_id = st.session_state.get('current_module_id')
+        
+        if current_module_id:
+            # Show action buttons
+            if st.button("📚 Continue Learning", type="primary", use_container_width=True, key="home_continue"):
+                st.switch_page("pages/3_📚_Content.py")
+            
+            if st.button("🧪 Take Quiz", use_container_width=True, key="home_quiz"):
+                st.switch_page("pages/4_🧪_Quiz.py")
+            
+            st.divider()
+            st.caption("Navigate to your current module")
+        else:
+            st.caption("Complete setup to unlock quick actions")
+            
+            st.divider()
+            
+            # Show setup guidance
+            if not st.session_state.get('current_input_id'):
+                if st.button("📤 Upload Syllabus", type="primary", use_container_width=True, key="home_input"):
+                    st.switch_page("pages/1_📤_Input.py")
+            elif not st.session_state.get('roadmap'):
+                if st.button("🗺️ Generate Roadmap", type="primary", use_container_width=True, key="home_roadmap"):
+                    st.switch_page("pages/2_🗺️_Roadmap.py")
+
+st.divider()
+
+# ========================================
+# CONDENSED "HOW IT WORKS" CARD
+# ========================================
+with st.container():
+    st.markdown("### 🎯 How It Works")
+    
+    # 2x2 grid layout
+    col1, col2 = st.columns(2, gap="medium")
+    
+    with col1:
+        st.markdown("""
+        **1. 📤 Upload Syllabus**  
+        Provide your course content
+        
+        **2. 🗺️ Generate Roadmap**  
+        AI creates personalized path
+        """)
+    
+    with col2:
+        st.markdown("""
+        **3. 📚 Study Materials**  
+        Access notes & cheat sheets
+        
+        **4. 🧪 Test Knowledge**  
+        Take quizzes & track progress
+        """)
+
+st.divider()
 
 # Footer
-st.divider()
-st.caption(f"Cognitive AI Learning Platform | Backend: {config.BACKEND_URL}")
+st.caption("Use the sidebar to navigate your learning journey.")
