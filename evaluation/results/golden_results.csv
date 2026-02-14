@@ -1,0 +1,21 @@
+correct_structure,coverage_rate,expected_behavior,expected_found,expected_questions,expected_topics,expected_total,forbidden_found,found_topics,generated_modules,hallucination_detected,passed,question_count,test_id,test_name,test_type,timestamp
+,1.0,,,,5,,,5,6,,True,,syllabus_001,Python Basics Syllabus,syllabus,2026-02-14T23:30:12.197481
+,1.0,,,,5,,,5,5,,True,,syllabus_002,Machine Learning Syllabus,syllabus,2026-02-14T23:30:18.241646
+,1.0,,,,5,,,5,5,,True,,syllabus_003,Web Development Syllabus,syllabus,2026-02-14T23:30:24.618701
+,0.4,,,,5,,,2,2,,False,,syllabus_004,Data Structures Syllabus,syllabus,2026-02-14T23:30:27.475878
+,1.0,,,,5,,,5,5,,True,,syllabus_005,DevOps Syllabus,syllabus,2026-02-14T23:30:35.076993
+,,,2,,,3,0,,,,True,,concept_001,Python Variables Concept,concept,2026-02-14T23:30:48.744148
+,,,3,,,3,0,,,,True,,concept_002,HTTP Methods Concept,concept,2026-02-14T23:31:00.360184
+,,,3,,,3,2,,,,False,,concept_003,Binary Search Concept,concept,2026-02-14T23:31:15.959529
+,,,3,,,3,0,,,,True,,concept_004,Docker Containers Concept,concept,2026-02-14T23:31:39.524653
+,,,3,,,3,0,,,,True,,concept_005,SQL Joins Concept,concept,2026-02-14T23:31:48.201487
+,,refuse_or_general,,,,,,,,False,True,,hallucination_001,Python Version Hallucination,hallucination,2026-02-14T23:32:08.477134
+,,refuse_or_neutral,,,,,,,,False,True,,hallucination_002,Framework Comparison Hallucination,hallucination,2026-02-14T23:32:22.956568
+,,refuse_or_general,,,,,,,,False,True,,hallucination_003,Historical Date Hallucination,hallucination,2026-02-14T23:32:52.339723
+,,context_dependent,,,,,,,,False,True,,hallucination_004,Performance Claim Hallucination,hallucination,2026-02-14T23:33:13.743763
+,,refuse_out_of_scope,,,,,,,,False,True,,hallucination_005,Out of Scope Hallucination,hallucination,2026-02-14T23:33:32.589786
+True,,,,5,,,,,,,True,5,quiz_001,Python Quiz JSON Compliance,quiz_json,2026-02-14T23:33:55.331001
+True,,,,5,,,,,,,True,5,quiz_002,Web Dev Quiz JSON Compliance,quiz_json,2026-02-14T23:34:04.772871
+True,,,,5,,,,,,,True,5,quiz_003,Algorithms Quiz JSON Compliance,quiz_json,2026-02-14T23:34:14.373036
+True,,,,5,,,,,,,True,5,quiz_004,Database Quiz JSON Compliance,quiz_json,2026-02-14T23:34:31.585957
+True,,,,5,,,,,,,True,5,quiz_005,DevOps Quiz JSON Compliance,quiz_json,2026-02-14T23:34:41.105155

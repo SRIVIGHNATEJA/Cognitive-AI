@@ -1,0 +1,13 @@
+task_name,run_number,run_type,total_time_seconds,peak_ram_mb,avg_cpu_percent,peak_cpu_percent,llm_call_count,timestamp,model_name
+roadmap_generation,1,cold,9.45,808.05,19.96,35.5,1,2026-02-14T23:20:10.145766,qwen2.5:1.5b
+roadmap_generation,2,warm,6.39,55.0,20.12,25.9,1,2026-02-14T23:20:16.698580,qwen2.5:1.5b
+roadmap_generation,3,warm,8.13,30.62,21.49,33.6,1,2026-02-14T23:20:25.264267,qwen2.5:1.5b
+notes_generation,1,cold,18.1,82.81,15.39,32.7,1,2026-02-14T23:20:43.384563,qwen2.5:1.5b
+notes_generation,2,warm,11.44,88.17,14.63,20.9,1,2026-02-14T23:20:54.966108,qwen2.5:1.5b
+notes_generation,3,warm,8.69,25.48,19.42,44.7,1,2026-02-14T23:21:04.041183,qwen2.5:1.5b
+quiz_generation,1,cold,8.81,102.98,25.06,46.1,1,2026-02-14T23:21:13.108955,qwen2.5:1.5b
+quiz_generation,2,warm,8.13,104.3,19.61,30.0,1,2026-02-14T23:21:21.678293,qwen2.5:1.5b
+quiz_generation,3,warm,16.02,67.36,22.92,58.0,2,2026-02-14T23:21:37.800342,qwen2.5:1.5b
+quiz_evaluation,1,cold,5.58,13.42,18.65,22.9,1,2026-02-14T23:21:51.948250,qwen2.5:1.5b
+quiz_evaluation,2,warm,6.11,0.28,37.7,53.5,1,2026-02-14T23:22:07.182385,qwen2.5:1.5b
+quiz_evaluation,3,warm,7.28,61.69,29.25,67.8,1,2026-02-14T23:22:27.485435,qwen2.5:1.5b

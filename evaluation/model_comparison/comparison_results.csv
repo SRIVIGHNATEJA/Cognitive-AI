@@ -1,0 +1,4 @@
+model_name,cold_time_seconds,warm_time_seconds,peak_ram_mb,syllabus_adherence_percent,concept_accuracy_percent,hallucination_pass_percent,json_compliance_percent,timestamp
+qwen2.5:1.5b,8.78,6.58,865.36,92.0,60.0,100.0,100.0,2026-02-15T01:04:03.427422
+llama3.2:1b,11.67,8.24,537.55,88.0,80.0,100.0,80.0,2026-02-15T01:09:45.260436
+phi:2.7b,15.87,2.01,1457.14,88.0,60.0,100.0,80.0,2026-02-15T01:16:17.244837

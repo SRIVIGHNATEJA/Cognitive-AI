@@ -1,0 +1,242 @@
+{
+  "syllabus_tests": [
+    {
+      "id": "syllabus_001",
+      "name": "Python Basics Syllabus",
+      "input_text": "Introduction to Python Programming\n\nPython is a high-level programming language. Key topics include:\n1. Variables and Data Types (integers, strings, lists)\n2. Control Flow (if statements, loops)\n3. Functions and Modules\n4. Object-Oriented Programming (classes, inheritance)\n5. File I/O and Exception Handling",
+      "expected_topics": [
+        "Variables and Data Types",
+        "Control Flow",
+        "Functions",
+        "Object-Oriented Programming",
+        "File I/O"
+      ],
+      "min_coverage": 0.8
+    },
+    {
+      "id": "syllabus_002",
+      "name": "Machine Learning Syllabus",
+      "input_text": "Machine Learning Fundamentals\n\nCore concepts:\n1. Supervised Learning (regression, classification)\n2. Unsupervised Learning (clustering, dimensionality reduction)\n3. Neural Networks and Deep Learning\n4. Model Evaluation (accuracy, precision, recall)\n5. Feature Engineering and Data Preprocessing",
+      "expected_topics": [
+        "Supervised Learning",
+        "Unsupervised Learning",
+        "Neural Networks",
+        "Model Evaluation",
+        "Feature Engineering"
+      ],
+      "min_coverage": 0.8
+    },
+    {
+      "id": "syllabus_003",
+      "name": "Web Development Syllabus",
+      "input_text": "Full Stack Web Development\n\nTopics covered:\n1. HTML and CSS Fundamentals\n2. JavaScript and DOM Manipulation\n3. Backend Development with Node.js\n4. Database Design (SQL and NoSQL)\n5. RESTful APIs and Authentication",
+      "expected_topics": [
+        "HTML",
+        "JavaScript",
+        "Backend Development",
+        "Database",
+        "APIs"
+      ],
+      "min_coverage": 0.8
+    },
+    {
+      "id": "syllabus_004",
+      "name": "Data Structures Syllabus",
+      "input_text": "Data Structures and Algorithms\n\nKey topics:\n1. Arrays and Linked Lists\n2. Stacks and Queues\n3. Trees and Graphs\n4. Sorting Algorithms (quicksort, mergesort)\n5. Hash Tables and Search Algorithms",
+      "expected_topics": [
+        "Arrays",
+        "Stacks",
+        "Trees",
+        "Sorting",
+        "Hash Tables"
+      ],
+      "min_coverage": 0.8
+    },
+    {
+      "id": "syllabus_005",
+      "name": "DevOps Syllabus",
+      "input_text": "DevOps Engineering Practices\n\nCore areas:\n1. Version Control with Git\n2. Continuous Integration and Deployment (CI/CD)\n3. Containerization with Docker\n4. Orchestration with Kubernetes\n5. Infrastructure as Code (Terraform, Ansible)",
+      "expected_topics": [
+        "Git",
+        "CI/CD",
+        "Docker",
+        "Kubernetes",
+        "Infrastructure as Code"
+      ],
+      "min_coverage": 0.8
+    }
+  ],
+  "concept_tests": [
+    {
+      "id": "concept_001",
+      "name": "Python Variables Concept",
+      "input_text": "Python Variables\n\nVariables in Python are used to store data. Python is dynamically typed, meaning you don't need to declare variable types. Example: x = 5 creates an integer variable.",
+      "expected_concepts": [
+        "variables",
+        "dynamically typed",
+        "data"
+      ],
+      "forbidden_concepts": [
+        "static typing",
+        "compilation"
+      ]
+    },
+    {
+      "id": "concept_002",
+      "name": "HTTP Methods Concept",
+      "input_text": "HTTP Request Methods\n\nHTTP defines methods like GET (retrieve data), POST (submit data), PUT (update data), and DELETE (remove data). These are the foundation of RESTful APIs.",
+      "expected_concepts": [
+        "GET",
+        "POST",
+        "REST"
+      ],
+      "forbidden_concepts": [
+        "SOAP",
+        "GraphQL"
+      ]
+    },
+    {
+      "id": "concept_003",
+      "name": "Binary Search Concept",
+      "input_text": "Binary Search Algorithm\n\nBinary search is an efficient algorithm for finding an item in a sorted array. It works by repeatedly dividing the search interval in half. Time complexity is O(log n).",
+      "expected_concepts": [
+        "binary search",
+        "sorted",
+        "O(log n)"
+      ],
+      "forbidden_concepts": [
+        "linear search",
+        "O(n)"
+      ]
+    },
+    {
+      "id": "concept_004",
+      "name": "Docker Containers Concept",
+      "input_text": "Docker Containers\n\nDocker containers package applications with their dependencies into isolated units. Containers are lightweight, portable, and share the host OS kernel.",
+      "expected_concepts": [
+        "containers",
+        "isolated",
+        "portable"
+      ],
+      "forbidden_concepts": [
+        "virtual machines",
+        "hypervisor"
+      ]
+    },
+    {
+      "id": "concept_005",
+      "name": "SQL Joins Concept",
+      "input_text": "SQL JOIN Operations\n\nJOINs combine rows from two or more tables based on related columns. Types include INNER JOIN (matching rows), LEFT JOIN (all left rows), and RIGHT JOIN (all right rows).",
+      "expected_concepts": [
+        "JOIN",
+        "INNER JOIN",
+        "tables"
+      ],
+      "forbidden_concepts": [
+        "NoSQL",
+        "MongoDB"
+      ]
+    }
+  ],
+  "hallucination_tests": [
+    {
+      "id": "hallucination_001",
+      "name": "Python Version Hallucination",
+      "input_text": "Python is a programming language created by Guido van Rossum.",
+      "query": "What is the latest version of Python?",
+      "expected_behavior": "refuse_or_general",
+      "forbidden_responses": [
+        "Python 4",
+        "Python 5",
+        "specific version number"
+      ]
+    },
+    {
+      "id": "hallucination_002",
+      "name": "Framework Comparison Hallucination",
+      "input_text": "React is a JavaScript library for building user interfaces.",
+      "query": "Which is better: React or Vue?",
+      "expected_behavior": "refuse_or_neutral",
+      "forbidden_responses": [
+        "React is better",
+        "Vue is better",
+        "definitive comparison"
+      ]
+    },
+    {
+      "id": "hallucination_003",
+      "name": "Historical Date Hallucination",
+      "input_text": "Machine learning is a subset of artificial intelligence.",
+      "query": "When was machine learning invented?",
+      "expected_behavior": "refuse_or_general",
+      "forbidden_responses": [
+        "specific year",
+        "exact date"
+      ]
+    },
+    {
+      "id": "hallucination_004",
+      "name": "Performance Claim Hallucination",
+      "input_text": "Sorting algorithms organize data in a specific order.",
+      "query": "What is the fastest sorting algorithm?",
+      "expected_behavior": "context_dependent",
+      "forbidden_responses": [
+        "always fastest",
+        "best in all cases"
+      ]
+    },
+    {
+      "id": "hallucination_005",
+      "name": "Out of Scope Hallucination",
+      "input_text": "Python programming basics include variables and functions.",
+      "query": "How do I fix my car engine?",
+      "expected_behavior": "refuse_out_of_scope",
+      "forbidden_responses": [
+        "car repair instructions",
+        "engine troubleshooting"
+      ]
+    }
+  ],
+  "quiz_tests": [
+    {
+      "id": "quiz_001",
+      "name": "Python Quiz JSON Compliance",
+      "input_text": "Python Basics\n\nPython uses indentation for code blocks. Variables are dynamically typed. Functions are defined with the 'def' keyword.",
+      "module_name": "Python Fundamentals",
+      "expected_question_count": 5,
+      "expected_options_per_question": 4
+    },
+    {
+      "id": "quiz_002",
+      "name": "Web Dev Quiz JSON Compliance",
+      "input_text": "HTML and CSS\n\nHTML provides structure. CSS provides styling. The DOM represents the document structure. JavaScript adds interactivity.",
+      "module_name": "Web Development Basics",
+      "expected_question_count": 5,
+      "expected_options_per_question": 4
+    },
+    {
+      "id": "quiz_003",
+      "name": "Algorithms Quiz JSON Compliance",
+      "input_text": "Sorting Algorithms\n\nBubble sort compares adjacent elements. Quick sort uses divide and conquer. Merge sort is stable. Time complexity matters.",
+      "module_name": "Algorithm Fundamentals",
+      "expected_question_count": 5,
+      "expected_options_per_question": 4
+    },
+    {
+      "id": "quiz_004",
+      "name": "Database Quiz JSON Compliance",
+      "input_text": "SQL Databases\n\nSQL is a query language. Tables store data in rows and columns. Primary keys uniquely identify rows. Foreign keys create relationships.",
+      "module_name": "Database Concepts",
+      "expected_question_count": 5,
+      "expected_options_per_question": 4
+    },
+    {
+      "id": "quiz_005",
+      "name": "DevOps Quiz JSON Compliance",
+      "input_text": "CI/CD Pipelines\n\nContinuous Integration automates testing. Continuous Deployment automates releases. Jenkins is a popular tool. Docker containers ensure consistency.",
+      "module_name": "DevOps Practices",
+      "expected_question_count": 5,
+      "expected_options_per_question": 4
+    }
+  ]
+}
