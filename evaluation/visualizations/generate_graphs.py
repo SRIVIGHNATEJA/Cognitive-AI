@@ -188,43 +188,107 @@ def generate_performance_tradeoff_chart(df, output_dir):
     """
     print("\n[5/5] Generating performance tradeoff chart...")
     
-    plt.figure(figsize=(10, 8))
+    fig, ax = plt.subplots(figsize=(14, 9))
+    
+    # Define distinct colors for each model with gradients
+    colors = ['#3498db', '#e74c3c', '#2ecc71']  # Blue, Red, Green
     
     # Create scatter plot with size proportional to cold time
-    sizes = df['cold_time_seconds'] * 50  # Scale for visibility
-    
-    scatter = plt.scatter(df['peak_ram_mb'], df['syllabus_adherence_percent'],
-                         s=sizes, alpha=0.6, c=range(len(df)), cmap='viridis',
-                         edgecolors='black', linewidth=1.5)
-    
-    # Add model name labels
     for idx, row in df.iterrows():
-        plt.annotate(row['model_name'],
-                    (row['peak_ram_mb'], row['syllabus_adherence_percent']),
-                    xytext=(10, 10), textcoords='offset points',
-                    fontsize=10, fontweight='bold',
-                    bbox=dict(boxstyle='round,pad=0.5', facecolor='yellow', alpha=0.7))
+        size = row['cold_time_seconds'] * 120  # Larger scale for better visibility
+        
+        # Plot the point with glow effect
+        ax.scatter(row['peak_ram_mb'], row['syllabus_adherence_percent'],
+                  s=size, alpha=0.3, c=colors[idx], zorder=2)
+        ax.scatter(row['peak_ram_mb'], row['syllabus_adherence_percent'],
+                  s=size*0.6, alpha=0.6, c=colors[idx], zorder=2)
+        ax.scatter(row['peak_ram_mb'], row['syllabus_adherence_percent'],
+                  s=size*0.3, alpha=0.9, c=colors[idx], 
+                  edgecolors='black', linewidth=2.5, zorder=3)
+        
+        # Add model name label with better positioning
+        ax.annotate(row['model_name'],
+                   (row['peak_ram_mb'], row['syllabus_adherence_percent']),
+                   xytext=(0, 20), textcoords='offset points',
+                   fontsize=12, fontweight='bold', ha='center',
+                   bbox=dict(boxstyle='round,pad=0.7', 
+                            facecolor='white', 
+                            edgecolor=colors[idx],
+                            linewidth=2.5,
+                            alpha=0.95),
+                   zorder=4)
+        
+        # Add metrics annotation below each point
+        metrics_text = f"RAM: {row['peak_ram_mb']:.0f}MB\nCold: {row['cold_time_seconds']:.2f}s\nWarm: {row['warm_time_seconds']:.2f}s"
+        ax.annotate(metrics_text,
+                   (row['peak_ram_mb'], row['syllabus_adherence_percent']),
+                   xytext=(0, -50), textcoords='offset points',
+                   fontsize=9, ha='center',
+                   bbox=dict(boxstyle='round,pad=0.5', 
+                            facecolor='#fffef0',
+                            edgecolor='#cccccc',
+                            linewidth=1.5,
+                            alpha=0.9),
+                   zorder=4)
     
-    plt.title('Performance vs Accuracy Tradeoff\n(Bubble size = Cold start time)',
-             fontsize=14, fontweight='bold')
-    plt.xlabel('Peak RAM Usage (MB)', fontsize=12)
-    plt.ylabel('Syllabus Adherence (%)', fontsize=12)
-    plt.grid(True, alpha=0.3)
+    # Set axis limits with padding
+    ram_range = df['peak_ram_mb'].max() - df['peak_ram_mb'].min()
+    acc_range = df['syllabus_adherence_percent'].max() - df['syllabus_adherence_percent'].min()
     
-    # Add legend for bubble sizes
-    legend_sizes = [df['cold_time_seconds'].min(), 
-                   df['cold_time_seconds'].median(),
-                   df['cold_time_seconds'].max()]
-    legend_labels = [f'{s:.1f}s' for s in legend_sizes]
-    legend_handles = [plt.scatter([], [], s=s*50, c='gray', alpha=0.6, edgecolors='black')
+    ax.set_xlim(df['peak_ram_mb'].min() - ram_range * 0.15,
+                df['peak_ram_mb'].max() + ram_range * 0.15)
+    ax.set_ylim(df['syllabus_adherence_percent'].min() - acc_range * 0.35,
+                df['syllabus_adherence_percent'].max() + acc_range * 0.15)
+    
+    # Enhanced styling
+    ax.set_title('Performance vs Accuracy Tradeoff\n(Bubble size represents cold start time)',
+                fontsize=16, fontweight='bold', pad=20, color='#2c3e50')
+    ax.set_xlabel('Peak RAM Usage (MB)', fontsize=14, fontweight='bold', color='#34495e')
+    ax.set_ylabel('Syllabus Adherence (%)', fontsize=14, fontweight='bold', color='#34495e')
+    
+    # Enhanced grid
+    ax.grid(True, alpha=0.25, linestyle='--', linewidth=0.8, color='#7f8c8d')
+    ax.set_facecolor('#fafbfc')
+    
+    # Add quadrant reference lines
+    median_ram = df['peak_ram_mb'].median()
+    median_acc = df['syllabus_adherence_percent'].median()
+    ax.axvline(median_ram, color='#95a5a6', linestyle=':', alpha=0.6, linewidth=1.5, zorder=1)
+    ax.axhline(median_acc, color='#95a5a6', linestyle=':', alpha=0.6, linewidth=1.5, zorder=1)
+    
+    # Add only the "Low RAM / High Accuracy" quadrant label (top-left)
+    ax.text(ax.get_xlim()[0] + ram_range * 0.08, 
+            ax.get_ylim()[1] - acc_range * 0.08,
+            'Low RAM\nHigh Accuracy', 
+            fontsize=10, style='italic', alpha=0.6, color='#27ae60',
+            fontweight='bold',
+            bbox=dict(boxstyle='round,pad=0.5', facecolor='#d5f4e6', 
+                     edgecolor='#27ae60', alpha=0.4, linewidth=1.5))
+    
+    # Create enhanced legend for bubble sizes
+    legend_sizes = [8, 12, 16]  # Representative cold start times
+    legend_labels = [f'{s}s' for s in legend_sizes]
+    legend_handles = [plt.scatter([], [], s=s*120, c='#7f8c8d', alpha=0.6, 
+                                 edgecolors='black', linewidth=2)
                      for s in legend_sizes]
-    plt.legend(legend_handles, legend_labels, title='Cold Start Time',
-              loc='lower right', frameon=True, fontsize=10)
+    
+    legend = ax.legend(legend_handles, legend_labels, 
+                      title='Cold Start Time', title_fontsize=12,
+                      loc='lower right', frameon=True, fontsize=11,
+                      framealpha=0.95, edgecolor='#34495e', fancybox=True,
+                      shadow=True)
+    legend.get_frame().set_facecolor('white')
+    legend.get_frame().set_linewidth(1.5)
+    
+    # Add subtle border to the plot
+    for spine in ax.spines.values():
+        spine.set_edgecolor('#bdc3c7')
+        spine.set_linewidth(1.5)
     
     plt.tight_layout()
     
     output_path = output_dir / "performance_tradeoff.png"
-    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.savefig(output_path, dpi=300, bbox_inches='tight', facecolor='white')
     plt.close()
     
     print(f"  ✓ Saved: {output_path}")
