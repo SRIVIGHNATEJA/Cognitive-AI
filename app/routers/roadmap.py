@@ -61,12 +61,22 @@ async def generate_roadmap(request: RoadmapGenerateRequest) -> RoadmapResponse:
         cached_roadmap = cache_service.get_cached_roadmap()
         if cached_roadmap:
             logger.info("Returning cached roadmap")
+            
+            # Handle both old and new cache formats
+            modules = [Module(**m) for m in cached_roadmap["modules"]]
+            total_modules = cached_roadmap.get("total_modules", len(modules))
+            total_estimated_hours = cached_roadmap.get(
+                "total_estimated_hours",
+                sum(m.estimated_hours for m in modules)
+            )
+            mode = LearningMode(cached_roadmap.get("mode", request.mode.value))
+            
             return RoadmapResponse(
                 success=True,
-                modules=[Module(**m) for m in cached_roadmap["modules"]],
-                total_modules=cached_roadmap["total_modules"],
-                total_estimated_hours=cached_roadmap["total_estimated_hours"],
-                mode=LearningMode(cached_roadmap["mode"]),
+                modules=modules,
+                total_modules=total_modules,
+                total_estimated_hours=total_estimated_hours,
+                mode=mode,
                 cached=True
             )
         
@@ -173,12 +183,22 @@ async def get_roadmap() -> RoadmapResponse:
             )
         
         logger.info("Returning cached roadmap")
+        
+        # Handle both old and new cache formats
+        modules = [Module(**m) for m in cached_roadmap["modules"]]
+        total_modules = cached_roadmap.get("total_modules", len(modules))
+        total_estimated_hours = cached_roadmap.get(
+            "total_estimated_hours",
+            sum(m.estimated_hours for m in modules)
+        )
+        mode = LearningMode(cached_roadmap.get("mode", "untimed"))
+        
         return RoadmapResponse(
             success=True,
-            modules=[Module(**m) for m in cached_roadmap["modules"]],
-            total_modules=cached_roadmap["total_modules"],
-            total_estimated_hours=cached_roadmap["total_estimated_hours"],
-            mode=LearningMode(cached_roadmap["mode"]),
+            modules=modules,
+            total_modules=total_modules,
+            total_estimated_hours=total_estimated_hours,
+            mode=mode,
             cached=True
         )
         
