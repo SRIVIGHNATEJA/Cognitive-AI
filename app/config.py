@@ -28,8 +28,8 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "qwen2.5:1.5b"
     llm_temperature: float = 0.1
-    llm_timeout: int = 120  # seconds
-    llm_num_predict: int = 8192  # Maximum output tokens (ensures complete JSON generation)
+    llm_timeout: int = 180  # seconds (ample headroom for local LLM CPU generation)
+    llm_num_predict: int = 2048  # Maximum output tokens (optimized for M3 memory)
     
     # File Upload Settings
     max_file_size_mb: int = 10
