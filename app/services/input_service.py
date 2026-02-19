@@ -6,6 +6,7 @@ and caching of processed content.
 """
 
 import uuid
+import gc
 from typing import Optional
 from datetime import datetime
 
@@ -138,6 +139,10 @@ class InputService:
         except FileProcessingError as e:
             logger.error(f"File extraction failed: {str(e)}")
             raise
+        finally:
+            # Immediately reclaim raw file byte buffers before downstream processing
+            del file_content
+            gc.collect()
         
         # Detect input type (use hint if provided)
         if hint_type:

@@ -6,6 +6,7 @@ and normalization capabilities.
 """
 
 import re
+import gc
 import logging
 from typing import Optional
 from io import BytesIO
@@ -252,6 +253,10 @@ def extract_text_from_file(filename: str, file_bytes: bytes) -> str:
     
     # Normalize the extracted text
     normalized_text = normalize_text(raw_text)
+    
+    # Immediately reclaim raw text buffer memory
+    del raw_text
+    gc.collect()
     
     # Validate minimum text length
     if len(normalized_text) < settings.min_extracted_text_length:
