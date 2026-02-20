@@ -75,63 +75,117 @@ class RoadmapService:
     
     def map_prerequisites_to_module_ids(self, modules: List[Module]) -> List[Module]:
         """
-        Map topic-name prerequisites to module IDs.
+        Map topic-name or existing module ID prerequisites to valid module IDs.
         
         This function handles the mismatch between LLM output (topic names) and
-        validation requirements (module IDs). The LLM is instructed to use topic
-        names in prerequisites, but module IDs are generated after LLM output.
-        
-        This is a design alignment fix to bridge the gap between prompt instructions
-        and validation logic.
+        validation requirements (module IDs). It also preserves any prerequisites
+        that are already valid module IDs.
         
         Args:
-            modules: List of modules with topic-name prerequisites
+            modules: List of modules with topic-name or module_id prerequisites
             
         Returns:
             List of modules with mapped module_id prerequisites
         """
-        # Build topic_name -> module_id mapping (case-insensitive)
-        topic_to_id = {}
-        for module in modules:
-            key = module.topic_name.lower().strip()
-            topic_to_id[key] = module.module_id
+        valid_module_ids = {module.module_id for module in modules}
+        topic_to_id = {module.topic_name.lower().strip(): module.module_id for module in modules}
         
         logger.debug(f"Built topic-to-ID mapping for {len(topic_to_id)} modules")
         
-        # Transform prerequisites from topic names to module IDs
         for module in modules:
             mapped_prereqs = []
             
             for prereq in module.prerequisites:
-                prereq_key = prereq.lower().strip()
+                prereq_str = str(prereq).strip()
+                prereq_lower = prereq_str.lower()
                 
-                if prereq_key in topic_to_id:
-                    # Exact match found
-                    mapped_id = topic_to_id[prereq_key]
-                    
-                    # Don't add self-references
-                    if mapped_id != module.module_id:
+                # Case 1: Already a valid module_id
+                if prereq_str in valid_module_ids:
+                    mapped_id = prereq_str
+                # Case 2: Topic name match
+                elif prereq_lower in topic_to_id:
+                    mapped_id = topic_to_id[prereq_lower]
+                else:
+                    logger.warning(
+                        f"Could not map prerequisite '{prereq}' for module "
+                        f"'{module.topic_name}'. Skipping."
+                    )
+                    continue
+                
+                # Don't add self-references
+                if mapped_id != module.module_id:
+                    if mapped_id not in mapped_prereqs:
                         mapped_prereqs.append(mapped_id)
                         logger.debug(
                             f"Mapped prerequisite '{prereq}' -> '{mapped_id}' "
                             f"for module '{module.topic_name}'"
                         )
-                    else:
-                        logger.warning(
-                            f"Skipping self-reference prerequisite '{prereq}' "
-                            f"for module '{module.topic_name}'"
-                        )
                 else:
-                    # No match - log warning and skip
                     logger.warning(
-                        f"Could not map prerequisite '{prereq}' for module "
-                        f"'{module.topic_name}'. Skipping."
+                        f"Skipping self-reference prerequisite '{prereq}' "
+                        f"for module '{module.topic_name}'"
                     )
             
-            # Update module with mapped prerequisites
             module.prerequisites = mapped_prereqs
         
         logger.info(f"Prerequisite mapping complete for {len(modules)} modules")
+        return modules
+
+    def prune_dag_cycles(self, modules: List[Module]) -> List[Module]:
+        """
+        Ensure the module prerequisite graph is a strict Directed Acyclic Graph (DAG).
+        Uses Kahn's algorithm and order constraints (prerequisite.order < module.order)
+        to detect and prune any circular or backward dependencies.
+        
+        Args:
+            modules: List of modules with mapped module IDs
+            
+        Returns:
+            List of modules guaranteed to form a strict acyclic DAG
+        """
+        module_by_id = {m.module_id: m for m in modules}
+        
+        # Step 1: Prune any backward/self dependencies (prereq.order >= module.order)
+        for module in modules:
+            valid_prereqs = []
+            for prereq_id in module.prerequisites:
+                prereq_mod = module_by_id.get(prereq_id)
+                if prereq_mod and prereq_mod.order < module.order:
+                    valid_prereqs.append(prereq_id)
+                else:
+                    logger.warning(
+                        f"Pruning invalid/backward prerequisite '{prereq_id}' "
+                        f"for module '{module.topic_name}' (order {module.order})"
+                    )
+            module.prerequisites = valid_prereqs
+        
+        # Step 2: Kahn's Algorithm to verify topological DAG property
+        in_degree = {m.module_id: len(m.prerequisites) for m in modules}
+        adj: Dict[str, List[str]] = {m.module_id: [] for m in modules}
+        for module in modules:
+            for p in module.prerequisites:
+                if p in adj:
+                    adj[p].append(module.module_id)
+        
+        # Queue of modules with 0 prerequisites
+        queue = [m_id for m_id, deg in in_degree.items() if deg == 0]
+        visited_count = 0
+        
+        while queue:
+            curr = queue.pop(0)
+            visited_count += 1
+            for neighbor in adj.get(curr, []):
+                in_degree[neighbor] -= 1
+                if in_degree[neighbor] == 0:
+                    queue.append(neighbor)
+        
+        # If any cycle remains (visited_count < len(modules)), prune remaining circular edges
+        if visited_count < len(modules):
+            logger.warning("Cycle detected in module dependencies; pruning circular edges.")
+            for module in modules:
+                if in_degree[module.module_id] > 0:
+                    module.prerequisites = []
+        
         return modules
     
     def validate_module_prerequisites(self, modules: List[Module]) -> bool:
@@ -233,6 +287,9 @@ class RoadmapService:
             # Map topic-name prerequisites to module IDs
             # This aligns LLM output (topic names) with validation requirements (module IDs)
             modules = self.map_prerequisites_to_module_ids(modules)
+            
+            # Prune any DAG cycles or backward dependencies using Kahn's algorithm
+            modules = self.prune_dag_cycles(modules)
             
             # Validate prerequisites (now with module IDs)
             self.validate_module_prerequisites(modules)
