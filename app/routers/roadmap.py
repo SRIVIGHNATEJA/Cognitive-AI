@@ -20,6 +20,7 @@ from app.models import (
 from app.services.roadmap_service import RoadmapService
 from app.services.cache_service import CacheService
 from app.services.input_service import InputService
+from app.services.session_service import session_service
 
 logger = logging.getLogger(__name__)
 
@@ -57,10 +58,10 @@ async def generate_roadmap(request: RoadmapGenerateRequest) -> RoadmapResponse:
     try:
         logger.info(f"Roadmap generation requested for input_id: {request.input_id}")
         
-        # Check if roadmap already exists in cache
+        # Check if roadmap already exists in cache for the requested input_id
         cached_roadmap = cache_service.get_cached_roadmap()
-        if cached_roadmap:
-            logger.info("Returning cached roadmap")
+        if cached_roadmap and cached_roadmap.get("input_id") == request.input_id:
+            logger.info(f"Returning cached roadmap matching input_id: {request.input_id}")
             
             # Handle both old and new cache formats
             modules = [Module(**m) for m in cached_roadmap["modules"]]
@@ -71,6 +72,16 @@ async def generate_roadmap(request: RoadmapGenerateRequest) -> RoadmapResponse:
             )
             mode = LearningMode(cached_roadmap.get("mode", request.mode.value))
             
+            # Ensure backend session accurately tracks this cached roadmap
+            session = session_service.get_or_create_session()
+            session = session_service.update_session(
+                session,
+                current_input_id=request.input_id,
+                roadmap_generated=True,
+                current_module_id=modules[0].module_id if modules else None
+            )
+            session_service.persist_session(session)
+            
             return RoadmapResponse(
                 success=True,
                 modules=modules,
@@ -78,6 +89,12 @@ async def generate_roadmap(request: RoadmapGenerateRequest) -> RoadmapResponse:
                 total_estimated_hours=total_estimated_hours,
                 mode=mode,
                 cached=True
+            )
+        elif cached_roadmap:
+            logger.info(
+                f"Cached roadmap found for input_id '{cached_roadmap.get('input_id')}', "
+                f"but generation requested for new input_id '{request.input_id}'. "
+                "Generating fresh roadmap and replacing cache."
             )
         
         # Validate input_id exists
@@ -112,7 +129,11 @@ async def generate_roadmap(request: RoadmapGenerateRequest) -> RoadmapResponse:
         total_modules = len(modules)
         total_estimated_hours = sum(m.estimated_hours for m in modules)
         
-        # Cache the roadmap
+        # Invalidate old dependent module notes and quizzes
+        cache_service.clear_cache('content')
+        cache_service.clear_cache('quizzes')
+
+        # Cache the new roadmap
         roadmap_data = {
             "modules": [m.model_dump() for m in modules],
             "total_modules": total_modules,
@@ -122,6 +143,17 @@ async def generate_roadmap(request: RoadmapGenerateRequest) -> RoadmapResponse:
         }
         cache_service.cache_roadmap(roadmap_data)
         
+        # Update and persist session state
+        session = session_service.get_or_create_session()
+        session = session_service.update_session(
+            session,
+            current_input_id=request.input_id,
+            roadmap_generated=True,
+            current_module_id=modules[0].module_id if modules else None
+        )
+        session.modules_completed = []
+        session_service.persist_session(session)
+
         logger.info(f"Roadmap generated successfully: {total_modules} modules, {total_estimated_hours} hours")
         
         return RoadmapResponse(
@@ -225,21 +257,30 @@ async def reset_roadmap() -> SuccessResponse:
     try:
         logger.info("Roadmap reset requested")
         
-        # Clear roadmap cache
+        # Cascading cache flush: clear roadmap and dependent content & quizzes
         deleted_count = cache_service.clear_cache('roadmap')
+        content_deleted = cache_service.clear_cache('content')
+        quizzes_deleted = cache_service.clear_cache('quizzes')
         
-        if deleted_count > 0:
-            logger.info(f"Roadmap cache cleared: {deleted_count} files deleted")
-            return SuccessResponse(
-                success=True,
-                message=f"Roadmap cache cleared successfully. {deleted_count} file(s) deleted."
-            )
-        else:
-            logger.info("No roadmap found to clear")
-            return SuccessResponse(
-                success=True,
-                message="No roadmap found in cache."
-            )
+        # Reset backend session state
+        session = session_service.get_or_create_session()
+        session = session_service.update_session(
+            session,
+            roadmap_generated=False,
+            current_module_id=None
+        )
+        session.modules_completed = []
+        session_service.persist_session(session)
+        
+        total_purged = deleted_count + content_deleted + quizzes_deleted
+        logger.info(
+            f"Cascading reset complete: {deleted_count} roadmap, "
+            f"{content_deleted} content, {quizzes_deleted} quiz files purged."
+        )
+        return SuccessResponse(
+            success=True,
+            message=f"Roadmap and dependent study materials cleared successfully. {total_purged} file(s) purged."
+        )
         
     except Exception as e:
         logger.error(f"Error resetting roadmap: {str(e)}", exc_info=True)

@@ -9,14 +9,11 @@ from fastapi import APIRouter, HTTPException, status
 from typing import Dict, Any
 
 from app.models import SessionData, SuccessResponse
-from app.services.session_service import SessionService
+from app.services.session_service import session_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/session", tags=["session"])
-
-# Service instance
-session_service = SessionService()
 
 
 @router.get("", response_model=SessionData)
@@ -83,6 +80,15 @@ async def reset_session() -> SuccessResponse:
         
         # Persist the new session (replaces old one)
         session_service.persist_session(new_session)
+        
+        # Purge all cached data for a complete fresh start
+        try:
+            if hasattr(session_service.cache_service, "clear_cache"):
+                session_service.cache_service.clear_cache()
+            if hasattr(session_service.cache_service, "clear_cache_type"):
+                session_service.cache_service.clear_cache_type("input")
+        except Exception as cache_err:
+            logger.warning(f"Cache purge during session reset: {cache_err}")
         
         logger.info(f"Session reset complete: {new_session.session_id}")
         
