@@ -380,3 +380,41 @@ class TestPromptBuilding:
         
         # Prompt should not contain all 5000 characters
         assert len(prompt) < 5000 + 1000  # Some buffer for prompt template
+
+
+class TestQuizAutoRepair:
+    """Tests for auto-repairing quiz options in LLM service."""
+    
+    def test_auto_repair_3_options(self, llm_service):
+        """Test that 3 options are auto-repaired to 4 by adding 'None of the above'."""
+        question = {
+            "question_number": 1,
+            "question_text": "Which of the following is a type of AI?",
+            "options": ["Narrow AI", "General AI", "Super AI"]
+        }
+        llm_service._auto_repair_options(question, 1)
+        assert len(question["options"]) == 4
+        assert question["options"][3] == "None of the above"
+    
+    def test_auto_repair_3_options_duplicate_fallback(self, llm_service):
+        """Test fallback when 'None of the above' is already in 3 options."""
+        question = {
+            "question_number": 1,
+            "question_text": "Which of the following is a type of AI?",
+            "options": ["Narrow AI", "General AI", "None of the above"]
+        }
+        llm_service._auto_repair_options(question, 1)
+        assert len(question["options"]) == 4
+        assert question["options"][3] == "Cannot be determined"
+    
+    def test_auto_repair_over_generated_options(self, llm_service):
+        """Test that 5 options are sliced to 4."""
+        question = {
+            "question_number": 1,
+            "question_text": "Which of the following is a type of AI?",
+            "options": ["Option A", "Option B", "Option C", "Option D", "Option E"]
+        }
+        llm_service._auto_repair_options(question, 1)
+        assert len(question["options"]) == 4
+        assert question["options"] == ["Option A", "Option B", "Option C", "Option D"]
+

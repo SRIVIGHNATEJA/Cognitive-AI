@@ -134,17 +134,21 @@ class DoubtService:
                 module_content=module_content
             )
             
-            in_scope = result.get("in_scope", False)
-            answer = result.get("answer", "")
+            in_scope = bool(result.get("in_scope", False))
+            topic_name = module_info.get("topic_name", "this module")
             
-            if in_scope:
-                logger.info("Question is within module scope")
-            else:
-                logger.info("Question is outside module scope")
+            # Hard Python Interceptor: Discard any hallucinated answer if marked out-of-scope
+            if not in_scope:
+                logger.info(f"Question is outside module scope for '{topic_name}'")
+                return {
+                    "in_scope": False,
+                    "answer": f"This question is outside the scope of '{topic_name}'. Please ask questions covered in this module's study notes."
+                }
             
+            logger.info(f"Question is within module scope for '{topic_name}'")
             return {
-                "answer": answer,
-                "in_scope": in_scope
+                "in_scope": True,
+                "answer": result.get("answer", "")
             }
             
         except LLMServiceError as e:
