@@ -1,7 +1,7 @@
 """
 Error display component.
 
-Provides consistent error message display across the app.
+Provides consistent error message display across the app with clean styling.
 """
 
 import streamlit as st
@@ -16,7 +16,7 @@ def show_error(message: str, details: Optional[str] = None):
         message: Error message
         details: Optional error details
     """
-    st.error(f"❌ {message}")
+    st.error(message)
     
     if details:
         with st.expander("Error Details"):
@@ -30,7 +30,7 @@ def show_warning(message: str):
     Args:
         message: Warning message
     """
-    st.warning(f"⚠️ {message}")
+    st.warning(message)
 
 
 def show_success(message: str):
@@ -40,7 +40,7 @@ def show_success(message: str):
     Args:
         message: Success message
     """
-    st.success(f"✅ {message}")
+    st.success(message)
 
 
 def show_info(message: str):
@@ -50,7 +50,7 @@ def show_info(message: str):
     Args:
         message: Info message
     """
-    st.info(f"ℹ️ {message}")
+    st.info(message)
 
 
 def handle_api_error(error: Exception, context: str = "Operation"):
@@ -63,7 +63,6 @@ def handle_api_error(error: Exception, context: str = "Operation"):
     """
     error_msg = str(error)
     
-    # Check for specific error types
     if "timeout" in error_msg.lower():
         show_error(
             f"{context} timed out",
@@ -71,7 +70,7 @@ def handle_api_error(error: Exception, context: str = "Operation"):
         )
     elif "connection" in error_msg.lower():
         show_error(
-            f"Cannot connect to backend",
+            "Cannot connect to backend server",
             "Please ensure the backend server is running at the configured URL."
         )
     elif "404" in error_msg:

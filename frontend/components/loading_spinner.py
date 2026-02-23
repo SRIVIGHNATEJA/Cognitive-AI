@@ -39,7 +39,7 @@ def with_loading(
     """
     # Prevent duplicate calls
     if st.session_state.get('loading', False):
-        st.warning("⏳ Please wait, operation in progress...")
+        st.warning("Please wait, operation in progress...")
         return None
     
     # Set loading state
@@ -67,10 +67,8 @@ def show_llm_loading(message: str = "Generating with AI..."):
     """
     Display loading indicator for LLM operations.
     
-    Shows special message about potential delays.
-    
     Args:
         message: Loading message
     """
     with st.spinner(message):
-        st.info("⏳ This may take up to 30 seconds. Please wait...")
+        st.info("This may take up to 30 seconds. Please wait...")
