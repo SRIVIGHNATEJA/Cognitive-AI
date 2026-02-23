@@ -20,7 +20,7 @@ class FrontendConfig:
     
     # UI Configuration
     PAGE_TITLE = os.getenv("PAGE_TITLE", "Cognitive AI Learning Platform")
-    PAGE_ICON = os.getenv("PAGE_ICON", "🧠")
+    PAGE_ICON = os.getenv("PAGE_ICON", None)
     LAYOUT = "wide"
     
     # File Upload Configuration
