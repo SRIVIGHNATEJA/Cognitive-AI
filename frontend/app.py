@@ -14,8 +14,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from config import config
 from services.api_client import api_client
-from utils.state_manager import init_session_state
-from components.error_display import show_error, show_warning
+from utils.state_manager import init_session_state, ensure_session_hydrated
+from components.error_display import show_error
+from components.navigation import render_stage_stepper
+import importlib
+import ui.sidebar
+importlib.reload(ui.sidebar)
 from ui.sidebar import render_sidebar
 
 
@@ -24,7 +28,6 @@ from ui.sidebar import render_sidebar
 # ========================================
 st.set_page_config(
     page_title=config.PAGE_TITLE,
-    page_icon=config.PAGE_ICON,
     layout=config.LAYOUT,
     initial_sidebar_state="expanded",
 )
@@ -40,30 +43,7 @@ def check_backend_health() -> bool:
         return False
 
 
-def sync_backend_session():
-    try:
-        session_data = api_client.get("/api/session")
-
-        st.session_state.backend_session_id = session_data.get("session_id")
-        st.session_state.backend_session_data = session_data
-        st.session_state.current_input_id = session_data.get("current_input_id")
-
-        if session_data.get("roadmap_generated"):
-            st.session_state.roadmap_mode = session_data.get("roadmap_mode")
-
-        if session_data.get("current_module_id"):
-            st.session_state.current_module_id = session_data.get("current_module_id")
-
-        return True
-
-    except Exception as e:
-        show_error("Failed to sync with backend", str(e))
-        return False
-
-
 def initialize_app():
-    init_session_state()
-
     if not check_backend_health():
         show_error(
             "Cannot connect to backend",
@@ -71,199 +51,146 @@ def initialize_app():
         )
         st.stop()
 
-    if st.session_state.backend_session_id is None:
-        sync_backend_session()
+    # Fast guarded hydration from backend cache
+    ensure_session_hydrated()
 
 
-# ========================================
-# INITIALIZE APP
-# ========================================
+# Initialize app and render sidebar
 initialize_app()
-
-# Render premium sidebar (already transformed)
 render_sidebar()
 
 
 # ========================================
-# HEADER
+# APP HEADER & PIPELINE STEPPER
 # ========================================
 st.markdown(
     """
-<div style="padding: 1rem 0 0.5rem 0;">
-    <h1 style="margin:0;font-size:2rem;">🧠 Cognitive AI Learning Platform</h1>
-    <p style="margin-top:0.4rem;color:#666;">
-        Your AI-powered learning companion
-    </p>
-</div>
-""",
+    <div style="padding: 0.5rem 0 1rem 0;">
+        <h1 style="margin: 0; font-size: 2.2rem; font-weight: 700;">Cognitive AI Learning Platform</h1>
+        <p style="margin-top: 0.3rem; color: #4b5563; font-size: 1.05rem;">
+            Intelligent Adaptive Learning System
+        </p>
+    </div>
+    """,
     unsafe_allow_html=True,
 )
 
+# Current stage resolution
+roadmap = st.session_state.get("roadmap")
+current_input_id = st.session_state.get("current_input_id")
+current_module = st.session_state.get("current_module")
+
+if roadmap and current_module:
+    active_stage = 3
+elif roadmap:
+    active_stage = 2
+elif current_input_id:
+    active_stage = 2
+else:
+    active_stage = 1
+
+render_stage_stepper(active_stage)
 st.divider()
 
 
 # ========================================
-# MAIN DASHBOARD GRID
+# COMMAND CENTER: ACTIVE LEARNING HERO CARD
 # ========================================
-col_left, col_right = st.columns(2, gap="large")
+with st.container(border=True):
+    col_hero_info, col_hero_action = st.columns([3, 2], gap="large", vertical_alignment="center")
 
+    with col_hero_info:
+        if roadmap and current_module:
+            order = current_module.get('order', 1)
+            total = roadmap.get('total_modules', 1)
+            topic = current_module.get('topic_name', 'Current Topic')
+            mode = roadmap.get('mode', 'untimed').title()
 
-# -------- LEFT: LEARNING OVERVIEW --------
-with col_left:
-    with st.container():
-        st.markdown("### 📊 Learning Overview")
+            st.markdown(f"### Active Module: **{topic}**")
+            st.caption(f"Curriculum Position: Module {order} of {total} | Pacing: **{mode} Mode**")
+            
+            progress_pct = min(1.0, max(0.05, order / float(total)))
+            st.progress(progress_pct, text=f"Course Progress: {order}/{total} Modules")
 
-        roadmap = st.session_state.get("roadmap")
-        current_module = st.session_state.get("current_module")
+        elif roadmap:
+            total = roadmap.get('total_modules', len(roadmap.get('modules', [])))
+            st.markdown("### Learning Roadmap Ready")
+            st.caption(f"Personalized curriculum generated with **{total} sequential modules**.")
 
-        m1, m2, m3 = st.columns(3)
-
-        with m1:
-            st.metric(
-                "Mode",
-                roadmap.get("mode", "—").title() if roadmap else "—",
-            )
-
-        with m2:
-            st.metric(
-                "Modules",
-                roadmap.get("total_modules", "—") if roadmap else "—",
-            )
-
-        with m3:
-            if roadmap and current_module:
-                st.metric(
-                    "Position",
-                    f"{current_module.get('order')} / {roadmap.get('total_modules')}",
-                )
-            else:
-                st.metric("Position", "—")
-
-        st.divider()
-
-        if current_module:
-            st.markdown(
-                f"**Current Module:** {current_module.get('topic_name', 'Unknown')}"
-            )
-            st.caption("Continue where you last stopped")
-        else:
-            st.info("📍 Upload a syllabus to start your learning journey")
-
-
-# -------- RIGHT: QUICK ACTIONS --------
-with col_right:
-    with st.container():
-        st.markdown("### ⚡ Quick Actions")
-
-        if st.session_state.get("current_module_id"):
-            st.button(
-                "📚 Continue Learning",
-                type="primary",
-                use_container_width=True,
-                key="home_continue",
-                on_click=lambda: st.switch_page("pages/3_📚_Content.py"),
-            )
-
-            st.button(
-                "🧪 Take Quiz",
-                use_container_width=True,
-                key="home_quiz",
-                on_click=lambda: st.switch_page("pages/4_🧪_Quiz.py"),
-            )
-
-            st.caption("Resume your active learning path")
+        elif current_input_id:
+            input_data = st.session_state.get('input_data', {})
+            detected = input_data.get('detected_type', 'Syllabus').replace('_', ' ').title()
+            st.markdown(f"### Document Ingested: **{detected}**")
+            st.caption("Content validated and ready for automated roadmap generation.")
 
         else:
-            if not st.session_state.get("current_input_id"):
-                st.button(
-                    "📤 Upload Syllabus",
-                    type="primary",
-                    use_container_width=True,
-                    key="home_input",
-                    on_click=lambda: st.switch_page("pages/1_📤_Input.py"),
-                )
+            st.markdown("### Welcome to the Learning Platform")
+            st.caption("Submit course materials to generate an automated curriculum with study notes and quizzes.")
 
-            elif not st.session_state.get("roadmap"):
-                st.button(
-                    "🗺️ Generate Roadmap",
-                    type="primary",
-                    use_container_width=True,
-                    key="home_roadmap",
-                    on_click=lambda: st.switch_page("pages/2_🗺️_Roadmap.py"),
-                )
+    with col_hero_action:
+        if roadmap and current_module:
+            if st.button("Resume Study Notes", type="primary", use_container_width=True, key="hero_btn_resume"):
+                st.switch_page("pages/3_📚_Content.py")
+            if st.button("Take Module Quiz", use_container_width=True, key="hero_btn_quiz"):
+                st.switch_page("pages/4_🧪_Quiz.py")
+        elif roadmap:
+            if st.button("Open Roadmap", type="primary", use_container_width=True, key="hero_btn_open_roadmap"):
+                st.switch_page("pages/2_🗺️_Roadmap.py")
+        elif current_input_id:
+            if st.button("Generate Roadmap", type="primary", use_container_width=True, key="hero_btn_gen_roadmap"):
+                st.switch_page("pages/2_🗺️_Roadmap.py")
+        else:
+            if st.button("Upload Syllabus Document", type="primary", use_container_width=True, key="hero_btn_upload_doc"):
+                st.switch_page("pages/1_📤_Input.py")
+
+st.markdown("")
+
+
+# ========================================
+# THE 4-STAGE PIPELINE CARDS (SOLID BUTTONS)
+# ========================================
+st.markdown("### Learning Journey Stages")
+st.caption("Click any accessible stage button to navigate directly")
+
+p1, p2, p3, p4 = st.columns(4, gap="medium")
+
+with p1:
+    with st.container(border=True):
+        st.markdown("#### Step 1: Ingestion")
+        st.caption("Upload PDF, PPT, DOCX or paste notes directly.")
+        if st.button("Open Input", use_container_width=True, key="pipeline_btn_1"):
+            st.switch_page("pages/1_📤_Input.py")
+
+with p2:
+    with st.container(border=True):
+        st.markdown("#### Step 2: Roadmap")
+        st.caption("Structured curriculum with prerequisite graph.")
+        can_open_roadmap = bool(current_input_id or roadmap)
+        if st.button("View Roadmap", disabled=not can_open_roadmap, use_container_width=True, key="pipeline_btn_2"):
+            st.switch_page("pages/2_🗺️_Roadmap.py")
+
+with p3:
+    with st.container(border=True):
+        st.markdown("#### Step 3: Study")
+        st.caption("In-depth study notes, cheat sheets, and doubt clearing.")
+        can_open_study = bool(roadmap)
+        if st.button("Study Modules", disabled=not can_open_study, use_container_width=True, key="pipeline_btn_3"):
+            st.switch_page("pages/3_📚_Content.py")
+
+with p4:
+    with st.container(border=True):
+        st.markdown("#### Step 4: Assessment")
+        st.caption("Targeted quizzes with automated scoring and feedback.")
+        can_open_quiz = bool(roadmap)
+        if st.button("Module Quizzes", disabled=not can_open_quiz, use_container_width=True, key="pipeline_btn_4"):
+            st.switch_page("pages/4_🧪_Quiz.py")
+
 
 st.divider()
 
-
-# ========================================
-# CONTEXTUAL GUIDANCE (ALIVE FEEL)
-# ========================================
-with st.container():
-    st.markdown("### 🧭 What’s Next")
-
-    if st.session_state.get("current_module_id"):
-        st.info(
-            "➡️ **Recommended:** Study the current module, then attempt the quiz to reinforce learning."
-        )
-    elif st.session_state.get("roadmap"):
-        st.info("➡️ **Recommended:** Select a module from the roadmap to begin.")
-    else:
-        st.info("➡️ **Recommended:** Upload a syllabus to generate your learning path.")
-
-
-st.divider()
-
-
-# ========================================
-# SESSION STATUS SNAPSHOT
-# ========================================
-with st.container():
-    st.markdown("### 🧠 Session Status")
-
-    s1, s2, s3 = st.columns(3)
-
-    with s1:
-        st.success("Roadmap Ready" if st.session_state.get("roadmap") else "No Roadmap")
-
-    with s2:
-        st.success(
-            "Content Available" if st.session_state.get("roadmap") else "—"
-        )
-
-    with s3:
-        st.success(
-            "Quiz Attempts Found"
-            if st.session_state.get("quiz_attempts")
-            else "No Quiz Attempts"
-        )
-
-st.divider()
-
-
-# ========================================
-# HOW IT WORKS — DENSE GRID
-# ========================================
-with st.container():
-    st.markdown("### 🎯 How It Works")
-
-    h1, h2, h3, h4 = st.columns(4)
-
-    with h1:
-        st.markdown("**📤 Upload**")
-        st.caption("Provide syllabus or notes")
-
-    with h2:
-        st.markdown("**🗺️ Roadmap**")
-        st.caption("AI builds learning path")
-
-    with h3:
-        st.markdown("**📚 Study**")
-        st.caption("Notes & cheat sheets")
-
-    with h4:
-        st.markdown("**🧪 Quiz**")
-        st.caption("Test & track progress")
-
-st.divider()
-
-st.caption("Use the sidebar to navigate your learning journey.")
+# Footer status
+col_foot1, col_foot2 = st.columns(2)
+with col_foot1:
+    st.caption("Backend Status: Active session synchronized with local LLM service.")
+with col_foot2:
+    st.caption("Persistence: All generated notes and quizzes are permanently cached.")
