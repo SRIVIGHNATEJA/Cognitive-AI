@@ -25,7 +25,8 @@ def test_llm_configuration():
     assert settings.ollama_base_url == "http://localhost:11434"
     assert settings.ollama_model == "qwen2.5:1.5b"
     assert settings.llm_temperature == 0.1
-    assert settings.llm_timeout == 120
+    assert settings.llm_timeout == 180
+    assert settings.llm_num_predict == 2048
 
 
 def test_file_upload_configuration():

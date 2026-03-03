@@ -25,19 +25,22 @@ def temp_cache_dir():
 @pytest.fixture
 def client_with_temp_cache(temp_cache_dir, monkeypatch):
     """Create a test client with temporary cache directory."""
+    from app import config
+    from app.services import session_service
+    
+    old_cache_dir = config.settings.cache_dir
+    old_session_cache = session_service.session_service.cache_service
+    
     # Patch the cache directory in settings
     monkeypatch.setenv("CACHE_DIR", temp_cache_dir)
-    
-    # Create new client with patched settings
-    from app import config
-    config.settings.cache_dir = temp_cache_dir
-    
-    # Reinitialize cache service with new directory
-    from app.services import session_service
+    monkeypatch.setattr(config.settings, "cache_dir", temp_cache_dir)
     session_service.session_service.cache_service = CacheService(cache_dir=temp_cache_dir)
     
     client = TestClient(app)
-    yield client
+    try:
+        yield client
+    finally:
+        session_service.session_service.cache_service = old_session_cache
 
 
 class TestSessionRetrieval:
@@ -138,7 +141,7 @@ class TestSessionPersistence:
         # Patch cache directory
         monkeypatch.setenv("CACHE_DIR", temp_cache_dir)
         from app import config
-        config.settings.cache_dir = temp_cache_dir
+        monkeypatch.setattr(config.settings, "cache_dir", temp_cache_dir)
         
         # First "instance" - create session
         from app.services.session_service import SessionService
@@ -174,7 +177,7 @@ class TestSessionPersistence:
         """Test that session file is created in cache directory."""
         monkeypatch.setenv("CACHE_DIR", temp_cache_dir)
         from app import config
-        config.settings.cache_dir = temp_cache_dir
+        monkeypatch.setattr(config.settings, "cache_dir", temp_cache_dir)
         
         from app.services.session_service import SessionService
         from app.services.cache_service import CacheService

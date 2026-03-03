@@ -244,6 +244,33 @@ class TestGenerateQuizAnswersLLM:
         # Check that labels were normalized to actual option text
         assert answers[0]["correct_answer"] == "A language"  # A → first option
         assert answers[1]["correct_answer"] == "Dynamic"     # B → second option
+
+    @patch.object(LLMService, '_check_ollama_availability')
+    @patch.object(LLMService, '_call_ollama')
+    def test_generate_answers_recovers_from_placeholder_on_final_attempt(
+        self, mock_call, mock_check, llm_service, module_info, sample_content, sample_questions
+    ):
+        """Test that generate_quiz_answers_llm recovers from a placeholder error on final attempt."""
+        mock_check.return_value = True
+        # Model returns placeholder on Question 5
+        mock_call.return_value = {
+            "response": """{
+                "answers": [
+                    {"question_number": 1, "correct_answer": "A", "explanation": "Explanation 1"},
+                    {"question_number": 2, "correct_answer": "B", "explanation": "Explanation 2"},
+                    {"question_number": 3, "correct_answer": "A", "explanation": "Explanation 3"},
+                    {"question_number": 4, "correct_answer": "A", "explanation": "Explanation 4"},
+                    {"question_number": 5, "correct_answer": "Exact option text here", "explanation": "Explanation 5"}
+                ]
+            }"""
+        }
+        
+        # Should not raise LLMServiceError because on the final attempt it falls back
+        answers = llm_service.generate_quiz_answers_llm(
+            module_info, sample_questions, sample_content, max_retries=1
+        )
+        assert len(answers) == 5
+        assert answers[4]["correct_answer"] == sample_questions[4]["options"][0]
     
     @patch.object(LLMService, '_check_ollama_availability')
     @patch.object(LLMService, '_call_ollama')
@@ -376,6 +403,35 @@ class TestValidateQuizAnswersStructure:
         
         assert is_valid is False
         assert "validation failed" in error_msg
+
+    def test_answers_with_invalid_correct_answer_fallback_when_allowed(self, llm_service, sample_questions):
+        """Test that invalid correct_answer falls back to option 0 when allow_fallback is True."""
+        answers_data = {
+            "answers": [
+                {
+                    "question_number": i,
+                    "correct_answer": "Exact option text here",
+                    "explanation": "Explanation"
+                }
+                for i in range(1, 6)
+            ]
+        }
+        
+        is_valid, error_msg = llm_service._validate_quiz_answers_structure(
+            answers_data, sample_questions, allow_fallback=True
+        )
+        
+        assert is_valid is True
+        assert error_msg == ""
+        # Check fallback to option 0
+        for i, ans in enumerate(answers_data["answers"]):
+            assert ans["correct_answer"] == sample_questions[i]["options"][0]
+
+    def test_normalize_stripped_prefix_match(self, llm_service):
+        """Test that option prefixes like 'A.' are stripped for normalization matching."""
+        options = ["A. Artificial Intelligence", "B. Machine Learning", "C. Deep Learning", "D. Robotics"]
+        normalized = llm_service._normalize_correct_answer("Artificial Intelligence", options)
+        assert normalized == "A. Artificial Intelligence"
     
     def test_answers_wrong_count_fails(self, llm_service, sample_questions):
         """Test that wrong number of answers fails validation."""
