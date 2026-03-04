@@ -37,7 +37,7 @@ async def upload_file(
     Upload and process an educational material file.
     
     Supported formats: PDF, PPT, PPTX, DOC, DOCX
-    Maximum file size: 10 MB (configurable)
+    Maximum file size: 5 MB (configurable)
     
     Args:
         file: Uploaded file

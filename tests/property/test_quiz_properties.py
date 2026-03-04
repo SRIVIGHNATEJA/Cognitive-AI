@@ -29,7 +29,7 @@ class TestQuizStructureCompliance:
         """
         Property 11: Quiz Structure Compliance
         
-        For any generated quiz, it should contain exactly 10 questions,
+        For any generated quiz, it should contain exactly 5 questions,
         each with exactly 4 options, a correct answer that matches one
         of the options, and an explanation.
         
@@ -39,7 +39,7 @@ class TestQuizStructureCompliance:
         if mode == LearningMode.TIMED and time_limit is None:
             time_limit = 600  # Default 10 minutes for timed quizzes
         
-        # Generate 10 valid quiz questions
+        # Generate 5 valid quiz questions
         questions = self._generate_valid_questions()
         
         # Create quiz with deterministic ID
@@ -55,8 +55,8 @@ class TestQuizStructureCompliance:
             created_at=datetime.now()
         )
         
-        # Property 1: Quiz must have exactly 10 questions
-        assert len(quiz.questions) == 10, f"Quiz must have exactly 10 questions, got {len(quiz.questions)}"
+        # Property 1: Quiz must have exactly 5 questions
+        assert len(quiz.questions) == 5, f"Quiz must have exactly 5 questions, got {len(quiz.questions)}"
         
         # Property 2: Each question must have exactly 4 options
         for i, question in enumerate(quiz.questions, 1):
@@ -74,7 +74,7 @@ class TestQuizStructureCompliance:
             assert len(question.explanation) <= 200, \
                 f"Question {i} explanation must be <= 200 chars, got {len(question.explanation)}"
         
-        # Property 5: Question numbers must be sequential from 1 to 10
+        # Property 5: Question numbers must be sequential from 1 to 5
         for i, question in enumerate(quiz.questions, 1):
             assert question.question_number == i, \
                 f"Question {i} has incorrect question_number: {question.question_number}"
@@ -103,14 +103,14 @@ class TestQuizStructureCompliance:
     
     def _generate_valid_questions(self) -> List[QuizQuestion]:
         """
-        Generate 10 valid quiz questions for testing.
+        Generate 5 valid quiz questions for testing.
         
         Returns:
-            List of 10 valid QuizQuestion objects
+            List of 5 valid QuizQuestion objects
         """
         questions = []
         
-        for i in range(1, 11):
+        for i in range(1, 6):
             question = QuizQuestion(
                 question_number=i,
                 question_text=f"What is the answer to question {i}?",
@@ -123,7 +123,7 @@ class TestQuizStructureCompliance:
         return questions
     
     @given(
-        question_number=st.integers(min_value=1, max_value=10),
+        question_number=st.integers(min_value=1, max_value=5),
         question_text=st.text(min_size=10, max_size=500),
         options=st.lists(
             st.text(min_size=1, max_size=100),
@@ -165,7 +165,7 @@ class TestQuizStructureCompliance:
         )
         
         # Verify all properties
-        assert 1 <= question.question_number <= 10
+        assert 1 <= question.question_number <= 5
         assert len(question.question_text) >= 10
         assert len(question.options) == 4
         assert question.correct_answer in question.options
@@ -180,7 +180,7 @@ class TestQuizStructureCompliance:
         questions=st.lists(
             st.builds(
                 QuizQuestion,
-                question_number=st.integers(min_value=1, max_value=10),
+                question_number=st.integers(min_value=1, max_value=5),
                 question_text=st.text(min_size=10, max_size=500),
                 options=st.lists(
                     st.text(min_size=1, max_size=100),
@@ -190,8 +190,8 @@ class TestQuizStructureCompliance:
                 correct_answer=st.text(min_size=1, max_size=100),
                 explanation=st.text(min_size=1, max_size=200)
             ),
-            min_size=10,
-            max_size=10
+            min_size=5,
+            max_size=5
         )
     )
     @settings(max_examples=100)
@@ -199,7 +199,7 @@ class TestQuizStructureCompliance:
         """
         Property: Quiz Question Count Invariant
         
-        For any quiz, the number of questions must always be exactly 10,
+        For any quiz, the number of questions must always be exactly 5,
         regardless of how the quiz is constructed or modified.
         
         **Validates: Requirements 4.1**
@@ -226,9 +226,9 @@ class TestQuizStructureCompliance:
             created_at=datetime.now()
         )
         
-        # Invariant: Quiz must always have exactly 10 questions
-        assert len(quiz.questions) == 10
+        # Invariant: Quiz must always have exactly 5 questions
+        assert len(quiz.questions) == 5
         
-        # Invariant: Question numbers must be 1-10
+        # Invariant: Question numbers must be 1-5
         question_numbers = [q.question_number for q in quiz.questions]
-        assert sorted(question_numbers) == list(range(1, 11))
+        assert sorted(question_numbers) == list(range(1, 6))
