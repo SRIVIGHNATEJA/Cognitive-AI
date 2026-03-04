@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     llm_num_predict: int = 2048  # Maximum output tokens (optimized for M3 memory)
     
     # File Upload Settings
-    max_file_size_mb: int = 10
+    max_file_size_mb: int = 5
     supported_file_formats: list[str] = [".pdf", ".ppt", ".pptx", ".doc", ".docx"]
     min_extracted_text_length: int = 20
     

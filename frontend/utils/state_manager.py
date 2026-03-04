@@ -261,8 +261,14 @@ def ensure_session_hydrated():
                         st.session_state.input_data = inp_data
                         if inp_data.get("extracted_text"):
                             st.session_state.raw_input_text = inp_data["extracted_text"]
+                    else:
+                        # Orphaned input pointer: file does not exist on disk
+                        st.session_state.current_input_id = None
+                        st.session_state.input_data = None
                 except Exception:
-                    pass
+                    # In case of network/fetch failure, do not leave dangling ID without data
+                    st.session_state.current_input_id = None
+                    st.session_state.input_data = None
     except Exception:
         # Graceful fallback if backend is momentarily unreachable
         pass

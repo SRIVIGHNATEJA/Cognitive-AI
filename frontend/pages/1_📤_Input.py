@@ -61,7 +61,7 @@ HELP_TEXT = """
 
 ### Specifications
 - Supported formats: PDF, PPT, PPTX, DOC, DOCX.
-- Maximum file size: 10 MB.
+- Maximum file size: 5 MB.
 - Content is automatically normalized and parsed into structural topics.
 """
 
@@ -82,7 +82,7 @@ display_session_messages()
 # ========================================
 @st.dialog("Active Course Detected")
 def confirm_replace_dialog(action_type: str, action_data: dict):
-    active_rm = st.session_state.get('roadmap', {})
+    active_rm = st.session_state.get('roadmap') or {}
     total_mods = active_rm.get('total_modules', len(active_rm.get('modules', [])))
     
     st.markdown(
@@ -197,7 +197,7 @@ if active_roadmap and active_roadmap.get('modules'):
 has_input = bool(st.session_state.get('current_input_id'))
 
 if has_input and not active_roadmap:
-    input_data = st.session_state.get('input_data', {})
+    input_data = st.session_state.get('input_data') or {}
     detected_type = input_data.get('detected_type', 'Unknown').replace('_', ' ').title()
     text_len = input_data.get('extracted_text_length', 0)
     filename = input_data.get('original_filename') or "Direct Text Input"
@@ -237,6 +237,19 @@ tab_file, tab_text = st.tabs(["Upload Document File", "Direct Text Input"])
 # -------- TAB 1: FILE UPLOAD --------
 with tab_file:
     with st.container(border=True):
+        st.markdown(
+            """
+            <style>
+            /* Cleanly hide the secondary dropzone size text to avoid duplicate/conflicting size indicators */
+            [data-testid="stFileUploaderDropzoneInstructions"] small,
+            [data-testid="stFileUploaderDropzone"] small,
+            section[data-testid="stFileUploadDropzone"] small {
+                display: none !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
         st.markdown("#### Upload Syllabus Document")
         st.caption(f"Supported formats: {', '.join(config.SUPPORTED_FORMATS).upper()} | Maximum size: {config.MAX_FILE_SIZE_MB}MB")
 
@@ -289,13 +302,12 @@ with tab_text:
             "Mixed": "mixed"
         }
 
-        # Safe pre-seeding of session state to avoid Streamlit state mutation exceptions
-        if "raw_input_text" not in st.session_state:
-            st.session_state.raw_input_text = ""
+        default_text_val = st.session_state.get("raw_input_text", "")
 
         text_content = st.text_area(
             "Content text:",
-            key="raw_input_text",
+            value=default_text_val,
+            key="input_text_area",
             height=240,
             placeholder="Paste syllabus modules, lecture notes, or question lists here...\n(Min: 10 chars, Max: 10,000 chars)",
             label_visibility="collapsed"

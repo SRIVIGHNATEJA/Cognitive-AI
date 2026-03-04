@@ -78,14 +78,14 @@ class TestFileSizeValidation:
     
     def test_various_file_sizes(self):
         """Test various file sizes around common boundaries."""
-        # 5 MB (should be valid with default 10 MB limit)
+        # 5 MB (should be valid with default 5 MB limit)
         assert validate_file_size(5 * 1024 * 1024) is True
         
-        # 9.9 MB (should be valid)
-        assert validate_file_size(int(9.9 * 1024 * 1024)) is True
+        # 4.9 MB (should be valid)
+        assert validate_file_size(int(4.9 * 1024 * 1024)) is True
         
-        # 10.1 MB (should be invalid with default 10 MB limit)
-        assert validate_file_size(int(10.1 * 1024 * 1024)) is False
+        # 5.1 MB (should be invalid with default 5 MB limit)
+        assert validate_file_size(int(5.1 * 1024 * 1024)) is False
 
 
 class TestTextNormalization:

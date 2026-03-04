@@ -6,4 +6,4 @@ source venv/bin/activate
 
 # Navigate to frontend and start Streamlit
 cd frontend
-streamlit run app.py
+streamlit run app.py --server.maxUploadSize=5

@@ -33,7 +33,7 @@ def test_file_upload_configuration():
     """Test file upload configuration defaults."""
     settings = Settings()
     
-    assert settings.max_file_size_mb == 10
+    assert settings.max_file_size_mb == 5
     assert ".pdf" in settings.supported_file_formats
     assert ".pptx" in settings.supported_file_formats
     assert ".docx" in settings.supported_file_formats

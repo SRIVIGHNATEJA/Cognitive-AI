@@ -118,7 +118,7 @@ with st.container(border=True):
             st.caption(f"Personalized curriculum generated with **{total} sequential modules**.")
 
         elif current_input_id:
-            input_data = st.session_state.get('input_data', {})
+            input_data = st.session_state.get('input_data') or {}
             detected = input_data.get('detected_type', 'Syllabus').replace('_', ' ').title()
             st.markdown(f"### Document Ingested: **{detected}**")
             st.caption("Content validated and ready for automated roadmap generation.")
@@ -157,14 +157,14 @@ p1, p2, p3, p4 = st.columns(4, gap="medium")
 with p1:
     with st.container(border=True):
         st.markdown("#### Step 1: Ingestion")
-        st.caption("Upload PDF, PPT, DOCX or paste notes directly.")
+        st.markdown('<div style="min-height: 44px; font-size: 0.85rem; color: #64748b; line-height: 1.35; margin-bottom: 0.75rem;">Upload PDF, PPT, DOCX or paste notes directly.</div>', unsafe_allow_html=True)
         if st.button("Open Input", use_container_width=True, key="pipeline_btn_1"):
             st.switch_page("pages/1_📤_Input.py")
 
 with p2:
     with st.container(border=True):
         st.markdown("#### Step 2: Roadmap")
-        st.caption("Structured curriculum with prerequisite graph.")
+        st.markdown('<div style="min-height: 44px; font-size: 0.85rem; color: #64748b; line-height: 1.35; margin-bottom: 0.75rem;">Structured curriculum with prerequisite graph.</div>', unsafe_allow_html=True)
         can_open_roadmap = bool(current_input_id or roadmap)
         if st.button("View Roadmap", disabled=not can_open_roadmap, use_container_width=True, key="pipeline_btn_2"):
             st.switch_page("pages/2_🗺️_Roadmap.py")
@@ -172,7 +172,7 @@ with p2:
 with p3:
     with st.container(border=True):
         st.markdown("#### Step 3: Study")
-        st.caption("In-depth study notes, cheat sheets, and doubt clearing.")
+        st.markdown('<div style="min-height: 44px; font-size: 0.85rem; color: #64748b; line-height: 1.35; margin-bottom: 0.75rem;">In-depth study notes, cheat sheets, and doubt clearing.</div>', unsafe_allow_html=True)
         can_open_study = bool(roadmap)
         if st.button("Study Modules", disabled=not can_open_study, use_container_width=True, key="pipeline_btn_3"):
             st.switch_page("pages/3_📚_Content.py")
@@ -180,7 +180,7 @@ with p3:
 with p4:
     with st.container(border=True):
         st.markdown("#### Step 4: Assessment")
-        st.caption("Targeted quizzes with automated scoring and feedback.")
+        st.markdown('<div style="min-height: 44px; font-size: 0.85rem; color: #64748b; line-height: 1.35; margin-bottom: 0.75rem;">Targeted quizzes with automated scoring and feedback.</div>', unsafe_allow_html=True)
         can_open_quiz = bool(roadmap)
         if st.button("Module Quizzes", disabled=not can_open_quiz, use_container_width=True, key="pipeline_btn_4"):
             st.switch_page("pages/4_🧪_Quiz.py")

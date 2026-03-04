@@ -24,7 +24,7 @@ class FrontendConfig:
     LAYOUT = "wide"
     
     # File Upload Configuration
-    MAX_FILE_SIZE_MB = 10
+    MAX_FILE_SIZE_MB = 5
     SUPPORTED_FORMATS = ["pdf", "ppt", "pptx", "doc", "docx"]
     
     # Quiz Configuration
